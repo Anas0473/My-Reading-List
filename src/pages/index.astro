@@ -658,12 +658,15 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
       :global(.saved-book-rating) { display: block; margin: auto 0 0; padding: .5rem 0 0; border: 0; background: none; color: var(--accent); font: inherit; font-size: 1rem; cursor: pointer; }
       :global(.saved-book-rating:hover) { opacity: .8; }
       :global(.selection-mode .saved-book-rating) { cursor: inherit; }
-      :global(.book-rating) { display: grid; gap: .35rem; margin: .75rem 0; }
-      :global(.book-rating-label) { font-size: .85rem; font-weight: 600; }
-      :global(.book-rating-stars) { display: flex; gap: .2rem; }
-      :global(.book-rating-stars button) { background: transparent; border: 0; color: var(--accent); font-size: 1.8rem; padding: .1rem .2rem; cursor: pointer; }
-      :global(.book-rating-summary) { font-size: .8rem; color: var(--muted); }
-      :global(.book-rating-clear) { justify-self: start; background: transparent; border: 0; color: var(--muted); text-decoration: underline; padding: .25rem 0; cursor: pointer; }
+      :global(.book-rating) { display: grid; grid-template-columns: auto 1fr auto; grid-template-areas: "label label clear" "stars summary summary"; align-items: center; column-gap: .6rem; row-gap: .35rem; margin: 0 0 1rem; padding-top: .85rem; border-top: 1px solid var(--border-dark); }
+      :global(.book-rating-label) { grid-area: label; color: var(--text-dark-muted); font-size: .8rem; }
+      :global(.book-rating-stars) { grid-area: stars; display: flex; gap: .1rem; margin-left: -.15rem; }
+      :global(.book-rating-stars button) { background: transparent; border: 0; border-radius: 4px; color: var(--accent); font-size: 1.45rem; line-height: 1; padding: .1rem .15rem; cursor: pointer; transition: transform .1s; }
+      :global(.book-rating-stars button:hover) { transform: scale(1.15); }
+      :global(.book-rating-summary) { grid-area: summary; font-size: .82rem; color: var(--text-dark-muted); }
+      :global(.book-rating-clear) { grid-area: clear; background: transparent; border: 0; color: var(--text-dark-muted); font: inherit; font-size: .78rem; text-decoration: underline; padding: 0; cursor: pointer; }
+      :global(.book-rating-clear:hover) { color: var(--accent); }
+      :global(.book-rating-clear[hidden]) { display: none; }
       :global(.book-rating button:focus-visible) { outline: 2px solid var(--page-focus); outline-offset: 2px; }
       .controls {
         display: grid;

@@ -24,7 +24,8 @@ export function createBookRating(
   const clear = document.createElement('button');
   clear.type = 'button';
   clear.className = 'book-rating-clear';
-  clear.textContent = 'Clear rating';
+  clear.textContent = 'Clear';
+  clear.setAttribute('aria-label', 'Clear rating');
   function change(value: number | null) {
     try {
       onChange(value);

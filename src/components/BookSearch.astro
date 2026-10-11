@@ -437,8 +437,11 @@ const { libraryBooks = [] } = Astro.props;
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    justify-content: space-between;
     gap: 0.75rem 1rem;
+  }
+  /* Next to the heading, so it stays put when the period buttons are hidden. */
+  .discovery-tabs {
+    margin-right: auto;
   }
   .trending-header h3 {
     margin: 0;

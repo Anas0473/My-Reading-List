@@ -1,6 +1,7 @@
 import type { APIRoute } from 'astro';
 import { MAX_PAGE_SIZE } from '../../lib/responsive-page-size';
 import { communityRating } from '../../lib/community-rating';
+import { findReadableWorks } from '../../lib/readable-editions';
 
 export const TRENDING_PERIODS = ['daily', 'weekly', 'monthly'] as const;
 export type TrendingPeriod = typeof TRENDING_PERIODS[number];
@@ -82,36 +83,6 @@ async function fetchTrending(period: TrendingPeriod) {
   }
 }
 
-async function searchReadableEditions(workKeys: string[], language?: string) {
-  const params = new URLSearchParams({
-    q: `key:(${workKeys.map((key) => `"${key}"`).join(' OR ')}) AND ebook_access:[borrowable TO *]`,
-    fields: `${TRENDING_FIELDS},editions.ebook_access`,
-    limit: String(workKeys.length),
-  });
-  // With a language set, Open Library picks a readable edition in that language when there is one.
-  if (language) params.set('language', language);
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 10000);
-  try {
-    const response = await fetch(`https://openlibrary.org/search.json?${params}`, {
-      signal: controller.signal,
-      headers: { 'User-Agent': 'my-book-library/0.0.1' },
-    });
-    if (!response.ok) throw new Error(`Open Library responded with ${response.status}`);
-    const data = await response.json();
-    const readableWorks = new Map<string, any>();
-    for (const work of Array.isArray(data.docs) ? data.docs : []) {
-      const edition = work.editions?.docs?.[0];
-      if (edition?.key && ['borrowable', 'public'].includes(edition.ebook_access)) {
-        readableWorks.set(work.key, work);
-      }
-    }
-    return readableWorks;
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
 // Trending lists one edition per book, which may not be readable, so Open Library is asked for a
 // readable edition of each trending book: English first, then any language. Trending order is kept.
 async function fetchReadableTrending(period: TrendingPeriod) {
@@ -123,12 +94,7 @@ async function fetchReadableTrending(period: TrendingPeriod) {
     .map((book: any) => book.workKey)
     .filter((key: string) => /^\/works\/OL\d+W$/.test(key));
   if (workKeys.length === 0) return [];
-  const readableWorks = await searchReadableEditions(workKeys, 'eng');
-  const remainingKeys = workKeys.filter((key) => !readableWorks.has(key));
-  if (remainingKeys.length > 0) {
-    const otherWorks = await searchReadableEditions(remainingKeys);
-    otherWorks.forEach((work, key) => readableWorks.set(key, work));
-  }
+  const readableWorks = await findReadableWorks(workKeys, { languages: ['eng'] });
   const books = workKeys
     .filter((key) => readableWorks.has(key))
     .map((key) => mapTrendingWork(readableWorks.get(key)));

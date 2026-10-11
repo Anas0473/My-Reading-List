@@ -1,5 +1,6 @@
 import type { APIRoute } from 'astro';
 import { mixBySubject, weightedSubjects } from '../../lib/recommendation-mix.ts';
+import { findReadableWorks } from '../../lib/readable-editions.ts';
 
 const CACHE_MS = 30 * 60 * 1000;
 const MAX_SEEDS = 12;
@@ -10,6 +11,7 @@ const MAX_AUTHOR_WORKS = 12;
 const MAX_SUBJECTS = 5;
 const WORKS_PER_SUBJECT = 50;
 const MAX_LANGUAGE_FILTER_CANDIDATES = 60;
+const MAX_READABLE_CANDIDATES = 200;
 const MAX_RECOMMENDATION_BOOKS = 40;
 const MAX_CACHED_RECORDS = 500;
 const MAX_RECOMMENDATION_RESULTS = 100;
@@ -199,10 +201,26 @@ function mapRecommendedWork(work: any, edition: any = null, selectedLanguage = '
   };
 }
 
+// Search results describe an edition differently from /books records; reshape for mapRecommendedWork.
+function searchEditionAsRecord(edition: any) {
+  const list = (value: any) => (Array.isArray(value) ? value : value ? [value] : []);
+  return {
+    key: edition.key,
+    title: edition.title,
+    subtitle: edition.subtitle,
+    publish_date: list(edition.publish_date),
+    covers: Number(edition.cover_i) > 0 ? [edition.cover_i] : [],
+    languages: list(edition.language).map((code: string) => ({ key: `/languages/${code}` })),
+    publishers: list(edition.publisher),
+    isbn_13: list(edition.isbn),
+  };
+}
+
 export const GET: APIRoute = async ({ url }) => {
   const requestedSeeds = url.searchParams.getAll('seed');
   const requestedLanguages = url.searchParams.getAll('language');
   const requestedFavorites = url.searchParams.getAll('favorite');
+  const readableOnly = url.searchParams.get('readable') === '1';
   if (requestedSeeds.length === 0 || requestedSeeds.length > MAX_SEEDS) {
     return jsonResponse({ error: `Provide between 1 and ${MAX_SEEDS} books for recommendations.` }, 400);
   }
@@ -228,7 +246,7 @@ export const GET: APIRoute = async ({ url }) => {
 
   const uniqueSeeds = Array.from(new Set(seeds.filter((seed): seed is string => seed !== null)));
   const favoriteSeeds = new Set(favorites);
-  const resultCacheKey = JSON.stringify([uniqueSeeds, Array.from(favoriteSeeds).sort(), preferredLanguages]);
+  const resultCacheKey = JSON.stringify([uniqueSeeds, Array.from(favoriteSeeds).sort(), preferredLanguages, readableOnly]);
   const cachedRecommendations = recommendationCache.get(resultCacheKey);
   if (cachedRecommendations && cachedRecommendations.expiresAt > Date.now()) {
     return jsonResponse({
@@ -284,7 +302,21 @@ export const GET: APIRoute = async ({ url }) => {
     ).map((key) => [key, { work: works.get(key) }] as const)];
     let books: any[];
     let partial = false;
-    if (preferredLanguages.length) {
+    if (readableOnly) {
+      // Only books with a readable edition, shown as that edition. The reader's languages are
+      // preferred; without them, English first and then any language.
+      const candidates = rankedWorks.slice(0, MAX_READABLE_CANDIDATES);
+      const readableWorks = await findReadableWorks(
+        candidates.map(([key]) => key),
+        preferredLanguages.length
+          ? { languages: preferredLanguages, anyLanguage: false }
+          : { languages: ['eng'] },
+      );
+      books = candidates.flatMap(([key, result]) => {
+        const edition = readableWorks.get(key)?.editions?.docs?.[0];
+        return edition ? [mapRecommendedWork(result.work, searchEditionAsRecord(edition))] : [];
+      }).slice(0, MAX_RECOMMENDATION_BOOKS);
+    } else if (preferredLanguages.length) {
       const candidates = rankedWorks.slice(0, MAX_LANGUAGE_FILTER_CANDIDATES);
       let failedEditionLookups = 0;
       const matchingEditions = await mapWithConcurrency(candidates, 6, async ([, result]) => {

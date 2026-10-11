@@ -672,7 +672,7 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
       :global(.book-rating button:focus-visible) { outline: 2px solid var(--page-focus); outline-offset: 2px; }
       .controls {
         display: grid;
-        grid-template-columns: minmax(0, 1fr) max-content max-content max-content max-content;
+        grid-template-columns: minmax(0, 1fr) max-content max-content max-content max-content max-content;
         align-items: center;
         gap: 0.6rem;
         width: 100%;
@@ -684,7 +684,7 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
         background: var(--fill);
       }
       .category-panel.selection-mode .controls {
-        grid-template-columns: minmax(0, 1fr) max-content max-content max-content;
+        grid-template-columns: minmax(0, 1fr) max-content max-content max-content max-content;
         grid-template-rows: auto auto;
       }
       .category-panel.selection-mode .filter-input-wrap {
@@ -699,9 +699,65 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
         grid-column: 3;
         grid-row: 1;
       }
-      .category-panel.selection-mode .reset-filters-button {
+      .category-panel.selection-mode .readable-toggle {
         grid-column: 4;
         grid-row: 1;
+      }
+      .category-panel.selection-mode .reset-filters-button {
+        grid-column: 5;
+        grid-row: 1;
+      }
+      .readable-toggle {
+        display: flex;
+        box-sizing: border-box;
+        height: 2.5rem;
+        align-items: center;
+        gap: 0.55rem;
+        padding: 0.45rem 0.75rem;
+        border: 1px solid var(--line);
+        border-radius: 9px;
+        background: var(--fill);
+        color: var(--fg);
+        font-size: 0.85rem;
+        white-space: nowrap;
+        cursor: pointer;
+      }
+      .readable-toggle:focus-within {
+        border-color: var(--page-focus);
+      }
+      .readable-toggle input {
+        position: relative;
+        flex: 0 0 auto;
+        width: 2rem;
+        height: 1.15rem;
+        margin: 0;
+        border-radius: 999px;
+        background: color-mix(in srgb, var(--fg) 22%, transparent);
+        appearance: none;
+        cursor: pointer;
+        transition: background 0.15s;
+      }
+      .readable-toggle input::before {
+        content: "";
+        position: absolute;
+        top: 0.15rem;
+        left: 0.15rem;
+        width: 0.85rem;
+        height: 0.85rem;
+        border-radius: 50%;
+        background: var(--fg);
+        transition: transform 0.15s;
+      }
+      .readable-toggle input:checked {
+        background: var(--accent);
+      }
+      .readable-toggle input:checked::before {
+        background: var(--accent-ink);
+        transform: translateX(0.85rem);
+      }
+      .readable-toggle input:focus-visible {
+        outline: 2px solid var(--page-focus);
+        outline-offset: 2px;
       }
       .batch-controls {
         display: flex;
@@ -1478,6 +1534,7 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
         .language-select {
           width: 100%;
         }
+        .readable-toggle,
         .reset-filters-button {
           align-self: flex-start;
         }
@@ -1649,6 +1706,10 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
                 <select class="language-select" aria-label="Filter this list by language">
                   <option value="">All languages</option>
                 </select>
+                <label class="readable-toggle" title="Only show editions you can read or borrow free on Open Library">
+                  <input type="checkbox" class="readable-only-checkbox" />
+                  Readable only
+                </label>
                 <button type="button" class="reset-filters-button" disabled>Reset filters</button>
               </div>
               <div class="cards-grid">
@@ -1867,6 +1928,50 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
       const panelRefreshers = new Map<string, () => void>();
       const panelLanguageLoaders = new Map<string, () => void>();
       const editionLanguageCacheKey = "my-book-library:edition-languages";
+      // Which saved editions can be read on Open Library; rechecked after a week.
+      const readableEditionCacheKey = "my-book-library:readable-editions";
+      const readableEditionMaxAge = 7 * 24 * 60 * 60 * 1000;
+      let readableEditionCache: Record<string, { readable: boolean; checkedAt: number }> = {};
+      try {
+        readableEditionCache = JSON.parse(localStorage.getItem(readableEditionCacheKey) || "{}") || {};
+      } catch {}
+      let readableEditionLoad: Promise<boolean> | null = null;
+      function cachedReadability(editionId: string) {
+        const entry = readableEditionCache[editionId];
+        return entry && Date.now() - entry.checkedAt < readableEditionMaxAge ? entry.readable : null;
+      }
+      // Resolves to false when Open Library could not be reached.
+      async function loadReadableEditions(editionIds: string[]) {
+        if (readableEditionLoad) await readableEditionLoad;
+        const missing = [...new Set(editionIds)].filter((id) => id && cachedReadability(id) === null);
+        if (!missing.length) return true;
+        readableEditionLoad = (async () => {
+          try {
+            for (let offset = 0; offset < missing.length; offset += 200) {
+              const batch = missing.slice(offset, offset + 200);
+              const response = await fetch("/api/readable-editions.json", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ editionKeys: batch }),
+              });
+              if (!response.ok) return false;
+              const data = await response.json();
+              const readable = new Set<string>(data.readable || []);
+              const checkedAt = Date.now();
+              batch.forEach((id) => {
+                readableEditionCache[id] = { readable: readable.has(id), checkedAt };
+              });
+              localStorage.setItem(readableEditionCacheKey, JSON.stringify(readableEditionCache));
+            }
+            return true;
+          } catch {
+            return false;
+          } finally {
+            readableEditionLoad = null;
+          }
+        })();
+        return readableEditionLoad;
+      }
       function normalizeEditionId(value: string) {
         return String(value || "").match(/OL\d+M/i)?.[0].toUpperCase() || "";
       }
@@ -4586,8 +4691,10 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
           ".reset-filters-button",
         ) as HTMLButtonElement;
         const clearFilterButton = panel.querySelector<HTMLButtonElement>(".filter-clear-button");
+        const readableOnlyCheckbox = panel.querySelector<HTMLInputElement>(".readable-only-checkbox");
         const grid = panel.querySelector(".cards-grid") as HTMLElement;
         const noMatchMsg = panel.querySelector(".no-match-msg") as HTMLElement;
+        let readabilityStatus: "" | "checking" | "failed" = "";
 
         if (!searchInput || !sortSelect || !languageSelect || !grid) return;
 
@@ -4690,9 +4797,11 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
           ].includes(selectedLanguage)
             ? selectedLanguage
             : "";
+          const readableOnly = Boolean(readableOnlyCheckbox?.checked);
           resetFiltersButton.disabled = !query
             && sortVal === "date-added-desc"
-            && !languageSelect.value;
+            && !languageSelect.value
+            && !readableOnly;
           if (clearFilterButton) clearFilterButton.hidden = searchInput.value.length === 0;
           const language = languageSelect.value;
 
@@ -4722,7 +4831,9 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
                 : language === "unverified"
                   ? !card.dataset.language && Boolean(normalizeEditionId(card.dataset.editionKey || ""))
                 : card.dataset.language === language);
-            const matches = matchesText && matchesLanguage;
+            const matchesReadable = !readableOnly
+              || cachedReadability(normalizeEditionId(card.dataset.editionKey || "")) === true;
+            const matches = matchesText && matchesLanguage && matchesReadable;
 
             if (matches) {
               if (card.style.display !== "flex") card.style.display = "flex";
@@ -4735,6 +4846,11 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
           if (noMatchMsg) {
             noMatchMsg.style.display =
               visibleCount === 0 && cards.length > 0 ? "block" : "none";
+            noMatchMsg.textContent = readableOnly && readabilityStatus === "checking"
+              ? "Checking which books are readable..."
+              : readableOnly && readabilityStatus === "failed"
+                ? "Couldn't check which books are readable. Open Library may be unavailable; try again later."
+                : readableOnly ? "No readable books found." : "No matching books found.";
           }
 
           cards.sort((a, b) => {
@@ -4853,15 +4969,39 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
         });
         sortSelect.addEventListener("change", updatePanel);
         languageSelect.addEventListener("change", updatePanel);
+        async function checkReadableBooks() {
+          if (!readableOnlyCheckbox?.checked) return;
+          const editionIds = Array.from(grid.querySelectorAll<HTMLElement>(".card"))
+            .map((card) => normalizeEditionId(card.dataset.editionKey || ""))
+            .filter(Boolean);
+          if (editionIds.every((id) => cachedReadability(id) !== null)) {
+            readabilityStatus = "";
+            return;
+          }
+          readabilityStatus = "checking";
+          updatePanel();
+          const loaded = await loadReadableEditions(editionIds);
+          readabilityStatus = loaded ? "" : "failed";
+          updatePanel();
+        }
+        readableOnlyCheckbox?.addEventListener("change", () => {
+          updatePanel();
+          void checkReadableBooks();
+        });
         resetFiltersButton.addEventListener("click", () => {
           searchInput.value = "";
           sortSelect.value = "date-added-desc";
           languageSelect.value = "";
+          if (readableOnlyCheckbox) readableOnlyCheckbox.checked = false;
+          readabilityStatus = "";
           updatePanel();
           searchInput.focus();
         });
         updatePanel();
-        panelRefreshers.set(panel.id, updatePanel);
+        panelRefreshers.set(panel.id, () => {
+          updatePanel();
+          void checkReadableBooks();
+        });
         panelLanguageLoaders.set(panel.id, () => { void loadMissingEditionLanguages(); });
         if (panel.classList.contains("active")) void loadMissingEditionLanguages();
 

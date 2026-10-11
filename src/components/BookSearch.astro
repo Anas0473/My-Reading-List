@@ -26,7 +26,7 @@ const { libraryBooks = [] } = Astro.props;
         type="text"
         id="global-book-search"
         aria-label="Search books by title, subtitle, author, or ISBN"
-        placeholder="Search by title, subtitle, author, or ISBN"
+        placeholder="Title, author, or ISBN"
       />
       <button type="button" id="clear-book-search" class="search-clear-button" aria-label="Clear search" title="Clear search" hidden>×</button>
     </div>
@@ -38,8 +38,8 @@ const { libraryBooks = [] } = Astro.props;
       <option value="year-asc">Year: Oldest First</option>
     </select>
     <div class="language-picker">
-      <button type="button" id="search-language-button" class="language-picker-button" aria-haspopup="true" aria-expanded="false" disabled>
-        Languages found after searching
+      <button type="button" id="search-language-button" class="language-picker-button" aria-haspopup="true" aria-expanded="false" title="Search first to see the languages found" disabled>
+        Languages
       </button>
       <div id="search-language-menu" class="language-picker-menu" hidden>
         <div id="search-language-options" class="language-picker-options" role="group" aria-label="Filter by language"></div>
@@ -58,8 +58,6 @@ const { libraryBooks = [] } = Astro.props;
         <input type="checkbox" id="search-readable-only" />
         Readable only
       </label>
-    </div>
-    <div class="search-reset-row">
       <button type="button" id="reset-search-filters" class="search-reset-button" disabled>Reset filters</button>
     </div>
   </div>
@@ -130,12 +128,12 @@ const { libraryBooks = [] } = Astro.props;
   }
   .search-input-wrap {
     position: relative;
-    flex: 1 1 15rem;
+    flex: 1 1 12rem;
     min-width: 0;
   }
   #search-sort-select,
   .language-picker {
-    flex: 0 0 10.5rem;
+    flex: 0 0 9.5rem;
   }
   .search-input-wrap::before {
     content: "";
@@ -350,11 +348,9 @@ const { libraryBooks = [] } = Astro.props;
     outline: 2px solid var(--page-focus);
     outline-offset: 2px;
   }
-  .search-reset-row {
-    flex: 1 0 100%;
-  }
   .search-reset-button {
     padding: 0.3rem 0.5rem;
+    white-space: nowrap;
     border: 0;
     border-radius: 7px;
     background: transparent;
@@ -1041,7 +1037,7 @@ const { libraryBooks = [] } = Astro.props;
   function updateSearchPlaceholder() {
     searchInput.placeholder = searchInputCompactQuery.matches
       ? 'Title, subtitle, author, or ISBN'
-      : 'Search by title, subtitle, author, or ISBN';
+      : 'Title, author, or ISBN';
   }
   updateSearchPlaceholder();
   searchInputCompactQuery.addEventListener('change', updateSearchPlaceholder);
@@ -1060,13 +1056,13 @@ const { libraryBooks = [] } = Astro.props;
   function updateLanguageButton() {
     const names = selectedLanguageCodes.map((code) => languageNameByCode.get(code) || code.toUpperCase());
     if (languageButton.disabled && names.length === 0) {
-      languageButton.textContent = 'Languages found after searching';
+      languageButton.textContent = 'Languages';
     } else {
       languageButton.textContent = names.length === 0
         ? 'All languages'
         : names.length <= 2 ? names.join(', ') : `${names.length} languages`;
     }
-    languageButton.title = names.join(', ');
+    languageButton.title = languageButton.disabled ? 'Search first to see the languages found' : names.join(', ');
   }
   // Acts like the old <select>: value is a comma-separated list of language codes.
   const searchLanguageSelect = {
@@ -1178,6 +1174,9 @@ const { libraryBooks = [] } = Astro.props;
   let recommendedRequestId = 0;
   let recommendedRenderedKey = '';
   let recommendedScreens = 1;
+  // Cards stay on screen after being added, so several books can be added in one go.
+  // The recommendations refresh the next time the tab is opened.
+  let recommendedShownKeys = new Set<string>();
   // How many screenfuls of trending books are shown; Show more adds one.
   let trendingShowMoreScreens = 1;
   function handleCoverError(event: Event) {
@@ -2134,6 +2133,9 @@ const { libraryBooks = [] } = Astro.props;
     if (!currentQuery && !trendingSection.hidden && discoveryMode === 'trending') {
       loadTrending(trendingPeriod);
     }
+    if (!currentQuery && !trendingSection.hidden && discoveryMode === 'recommended') {
+      refreshRecommended();
+    }
     if (currentQuery) {
       performSearch(
         currentQuery,
@@ -2236,10 +2238,11 @@ const { libraryBooks = [] } = Astro.props;
       ...libraryBooks.filter((item: any) => shelfLabels[item.status]),
     ];
     const matchingBooks = recommendedBooks.filter((book) =>
-      !listBooks.some((item: any) => isSameRecommendedBook(item, book) || isSameBook(item, book)),
+      recommendedShownKeys.has(book.key) || !listBooks.some((item: any) => isSameRecommendedBook(item, book) || isSameBook(item, book)),
     );
     const available = deduplicateRecommendedBooks(matchingBooks);
     const books = available.slice(0, searchPageSize * recommendedScreens);
+    books.forEach((book) => recommendedShownKeys.add(book.key));
     trendingShowMoreButton.hidden = available.length <= books.length;
     trendingShowMoreButton.textContent = 'Show more recommendations';
     const renderKey = `${recommendedLoadedSeedKey}|${books.map((book) => book.key).join(',')}`;
@@ -2250,7 +2253,7 @@ const { libraryBooks = [] } = Astro.props;
       trendingStatus.textContent = recommendedBooks.length
         ? `You already have these books in your lists. Try adding more books to get fresh recommendations.${recommendedPartial ? ' Some Open Library editions could not be checked; try again shortly.' : ''}`
         : recommendedLoadedSeedKey
-          ? `No recommendations found yet. Add more books to your lists and try again.${recommendedPartial ? ' Some Open Library editions could not be checked; try again shortly.' : ''}`
+          ? `No ${recommendedLoadedSeedKey.endsWith('|true') ? 'readable ' : ''}recommendations found yet. Add more books to your lists and try again.${recommendedPartial ? ' Some Open Library editions could not be checked; try again shortly.' : ''}`
           : 'Add books to Read, Reading or Plan to Read to get recommendations.';
       return;
     }
@@ -2265,7 +2268,8 @@ const { libraryBooks = [] } = Astro.props;
     const { seeds, favorites } = getRecommendationSeeds();
     const languages = getRecommendationLanguages();
     const seedKey = `${seeds.join('|')}|${favorites.join('|')}`;
-    const requestKey = `${seedKey}|${languages.join(',')}`;
+    const readable = currentReadableOnly;
+    const requestKey = `${seedKey}|${languages.join(',')}|${readable}`;
     if (!seeds.length) {
       recommendedBooks = [];
       recommendedLoadedSeedKey = requestKey;
@@ -2292,6 +2296,7 @@ const { libraryBooks = [] } = Astro.props;
       seeds.forEach((seed) => params.append('seed', seed));
       favorites.forEach((seed) => params.append('favorite', seed));
       languages.forEach((language) => params.append('language', language));
+      if (readable) params.set('readable', '1');
       const response = await fetch(`/api/recommended-books.json?${params}`);
       const data = await response.json();
       if (requestId !== recommendedRequestId) return;
@@ -2362,11 +2367,17 @@ const { libraryBooks = [] } = Astro.props;
     }
   }
 
+  function refreshRecommended() {
+    recommendedShownKeys = new Set();
+    recommendedRenderedKey = '';
+    loadRecommended();
+  }
+
   function updateTrendingVisibility() {
     trendingSection.hidden = Boolean(currentQuery);
     if (trendingSection.hidden) return;
     if (discoveryMode === 'recommended') {
-      loadRecommended();
+      refreshRecommended();
     } else if (!isTrendingLoaded()) {
       loadTrending(trendingPeriod);
     }
@@ -2384,7 +2395,7 @@ const { libraryBooks = [] } = Astro.props;
       );
       trendingPeriodControls.hidden = discoveryMode !== 'trending';
       if (discoveryMode === 'recommended') {
-        loadRecommended();
+        refreshRecommended();
       } else if (isTrendingLoaded()) {
         renderTrending();
       } else {
@@ -2413,19 +2424,12 @@ const { libraryBooks = [] } = Astro.props;
   });
 
   updateTrendingVisibility();
-  window.addEventListener('library:book-shelf-changed', () => {
-    if (discoveryMode === 'recommended' && !trendingSection.hidden) loadRecommended();
-  });
+  // Recommendations are left as they are while open; see recommendedShownKeys.
   window.addEventListener('library:cloud-updated', () => {
-    recommendedRenderedKey = '';
     trendingRenderedKey = '';
-    if (discoveryMode === 'recommended' && !trendingSection.hidden) loadRecommended();
-    else if (!trendingSection.hidden && trendingBooks.length) renderTrending();
-  });
-  window.addEventListener('library:book-removed', () => {
-    if (discoveryMode === 'recommended' && !trendingSection.hidden) {
-      window.setTimeout(() => loadRecommended(), 0);
-    }
+    if (discoveryMode === 'trending' && !trendingSection.hidden && trendingBooks.length) renderTrending();
+    // Lists that arrive after the tab opened (e.g. from another device) still get recommendations.
+    if (discoveryMode === 'recommended' && !trendingSection.hidden && recommendedShownKeys.size === 0) loadRecommended();
   });
 
   document.addEventListener('click', (event) => {

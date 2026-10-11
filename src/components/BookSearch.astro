@@ -375,6 +375,7 @@ const { libraryBooks = [] } = Astro.props;
     display: none;
   }
   .trending-status {
+    white-space: pre-line;
     margin: 0.75rem 0 0;
     color: var(--muted);
     font-size: 0.85rem;
@@ -1990,7 +1991,7 @@ const { libraryBooks = [] } = Astro.props;
     trendingStatus.textContent = recommendedPartial
       ? 'Some Open Library editions could not be checked. Showing the matches available; try again shortly for more.'
       : getRecommendationLanguageLabel(getRecommendationLanguages())
-        + (getRecommendationSeeds().seeds.length < 5 ? ' Add or rate more books for better recommendations.' : '');
+        + (getRecommendationSeeds().seeds.length < 5 ? '\nAdd or rate more books for better recommendations.' : '');
     renderBookCards(trendingContainer, books);
   }
 

@@ -1955,7 +1955,7 @@ const { libraryBooks = [] } = Astro.props;
   }
 
   function getRecommendationLanguageLabel(languages: string[]) {
-    const basis = 'Picked from your favourite books and the genres you read.';
+    const basis = 'Picked from your favourite books and the genres in your lists.';
     if (!languages.length) return basis;
     const displayNames = new Intl.DisplayNames(['en'], { type: 'language', fallback: 'none' });
     const names = languages.map((language) => displayNames.of(language) || language.toUpperCase());

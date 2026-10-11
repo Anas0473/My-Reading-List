@@ -265,6 +265,7 @@ export const GET: APIRoute = async ({ url }) => {
   const language = url.searchParams.get('language')?.trim();
   const discoverLanguages = url.searchParams.get('discover_languages') === '1';
   const includeAllResults = url.searchParams.get('all_results') === '1';
+  const readableOnly = url.searchParams.get('readable') === '1';
   const sort = url.searchParams.get('sort') || '';
   const shouldSort = ['title-asc', 'title-desc', 'year-desc', 'year-asc'].includes(sort);
   const page = Math.max(1, parseInt(url.searchParams.get('page') || '1', 10));
@@ -325,7 +326,8 @@ export const GET: APIRoute = async ({ url }) => {
   };
 
   try {
-    if (directType && directId) {
+    // Readable mode sends direct IDs through search so Open Library can check readability.
+    if (directType && directId && !readableOnly) {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 8000);
       let directResponse: Response;
@@ -397,14 +399,19 @@ export const GET: APIRoute = async ({ url }) => {
       );
     }
 
-    const searchField = authorKey
+    const readableDirectQuery = readableOnly && directType && directId
+      ? directType === 'books' ? `edition_key:${directId.toUpperCase()}` : `key:/works/${directId.toUpperCase()}`
+      : '';
+    const searchField = readableDirectQuery
+      ? 'q'
+      : authorKey
       ? 'author_key'
       : authorOnly
         ? 'author'
         : isIsbnSearch
           ? 'isbn'
           : query.trim().split(/\s+/).length > 1 ? 'q' : 'title';
-    const isGeneralQuery = !authorKey && !authorOnly && !isIsbnSearch
+    const isGeneralQuery = !readableDirectQuery && !authorKey && !authorOnly && !isIsbnSearch
       && query.trim().split(/\s+/).length > 1;
     const structuredQuery = isGeneralQuery
       ? query.trim().split(/\s+/)
@@ -430,8 +437,9 @@ export const GET: APIRoute = async ({ url }) => {
           ? 'old'
           : '';
     const searchParams = new URLSearchParams({
-      [searchField]: isIsbnSearch ? normalizedIsbn : authorKey || structuredQuery,
-      fields: 'title,subtitle,author_name,author_key,language,first_publish_year,cover_i,isbn,publisher,key,edition_key,edition_count,ratings_average,ratings_count',
+      [searchField]: readableDirectQuery || (isIsbnSearch ? normalizedIsbn : authorKey || structuredQuery),
+      fields: 'title,subtitle,author_name,author_key,language,first_publish_year,cover_i,isbn,publisher,key,edition_key,edition_count,ratings_average,ratings_count'
+        + (readableOnly ? ',editions,editions.key,editions.ebook_access,editions.ia' : ''),
       limit: String(hasCompleteResultSet ? 1000 : limit),
       offset: String(hasCompleteResultSet || (useOpenLibrarySort && sort === 'title-desc') ? 0 : offset),
     });
@@ -447,10 +455,15 @@ export const GET: APIRoute = async ({ url }) => {
       .map((isbn) => isbn.replace(/[\s-]/g, '').toUpperCase())
       .filter((isbn) => /^(?:\d{9}[\dX]|\d{13})$/.test(isbn))
       .map((isbn) => `NOT isbn:${isbn}`);
-    const exclusionFilters = [...excludedWorkKeys, ...excludedIsbns];
+    // Borrowable or public; printdisabled is only readable by print-disabled users.
+    const readableFilter = 'ebook_access:[borrowable TO *]';
+    const exclusionFilters = [...excludedWorkKeys, ...excludedIsbns, ...(readableOnly ? [readableFilter] : [])];
     if (exclusionFilters.length > 0) {
       const queryFilter = [searchParams.get('q'), ...exclusionFilters].filter(Boolean).join(' AND ');
       searchParams.set('q', queryFilter);
+    }
+    if (readableOnly) {
+      languageSearchParams.set('q', [languageSearchParams.get('q'), readableFilter].filter(Boolean).join(' AND '));
     }
     if (useOpenLibrarySort && openLibrarySort) searchParams.set('sort', openLibrarySort);
     const apiUrl = `https://openlibrary.org/search.json?${searchParams}`;
@@ -473,7 +486,7 @@ export const GET: APIRoute = async ({ url }) => {
       data = { ...data, docs: [...(data.docs || [])].reverse() };
     }
     let isbnEdition: any = null;
-    if (isIsbnSearch) {
+    if (isIsbnSearch && !readableOnly) {
       const isbnController = new AbortController();
       const isbnTimeout = setTimeout(() => isbnController.abort(), 8000);
       await optionalEditionLookup(async () => {
@@ -499,7 +512,13 @@ export const GET: APIRoute = async ({ url }) => {
     const normalizedPhrase = query.trim().toLocaleLowerCase();
     const topRankedCount = 5;
     const docs = data.docs || [];
-    const relevantDocs = docs;
+    // With the readable filter, Open Library returns the best readable edition matching the
+    // search and language; only that edition is used so a non-readable one is never shown.
+    const readableEditionOf = (doc: any) => {
+      const edition = doc.editions?.docs?.[0];
+      return edition?.key && ['borrowable', 'public'].includes(edition.ebook_access) ? edition : null;
+    };
+    const relevantDocs = readableOnly ? docs.filter(readableEditionOf) : docs;
     const fallbackEditionMatches = new Map<string, any>();
     const authorMatchingDocs = authorExact
       ? relevantDocs.filter((doc: any) =>
@@ -509,7 +528,7 @@ export const GET: APIRoute = async ({ url }) => {
         )
       : relevantDocs;
     const titleEditionMatches = new Map<string, any>();
-    if (isGeneralQuery && !language) {
+    if (isGeneralQuery && !language && !readableOnly) {
       const titleCandidates = authorMatchingDocs
         .map((doc: any) => {
           const title = String(doc.title || '').toLocaleLowerCase();
@@ -534,7 +553,7 @@ export const GET: APIRoute = async ({ url }) => {
       });
     }
     const languageEditionMatches = new Map<string, any>();
-    if (language) {
+    if (language && !readableOnly) {
       const untaggedDocs = authorMatchingDocs.filter((doc: any) =>
         (!doc.language || doc.language.length === 0) && doc.key,
       );
@@ -566,7 +585,7 @@ export const GET: APIRoute = async ({ url }) => {
       ...languageOptionMatchingDocs.flatMap((doc: any) => doc.language || []),
       ...(languageEditionMatches.size > 0 && language ? [language] : []),
     ])).sort();
-    const matchingDocs = language
+    const matchingDocs = language && !readableOnly
       ? authorMatchingDocs.filter((doc: any) =>
           (doc.language || []).includes(language) || languageEditionMatches.has(String(doc.key)),
         )
@@ -618,7 +637,9 @@ export const GET: APIRoute = async ({ url }) => {
 
     // Reuse sort-independent edition lookups so displayed details remain stable across sorts.
     const editionLookupDocs = includeAllResults ? pageDocs.slice(0, limit) : pageDocs;
-    const matchedEditions = isIsbnSearch
+    const matchedEditions = readableOnly
+      ? editionLookupDocs.map(() => null)
+      : isIsbnSearch
       ? editionLookupDocs.map((doc: any) =>
           isbnEdition && (
             isbnEdition.works?.some((work: any) => work.key === doc.key)
@@ -639,6 +660,11 @@ export const GET: APIRoute = async ({ url }) => {
       : pageDocs.map(() => null);
       const editionDetailsDocs = includeAllResults ? pageDocs.slice(0, limit) : pageDocs;
       const selectedEditions = await mapEditionLookups(editionDetailsDocs, async (doc: any, index: number) => {
+        if (readableOnly) {
+          const readableEdition = readableEditionOf(doc);
+          const details = await optionalEditionLookup(() => fetchSelectedEdition(readableEdition.key));
+          return { ...details, key: readableEdition.key, ia: readableEdition.ia };
+        }
         const matchedEdition = matchedEditions[index];
         let edition = matchedEdition;
         const editionKey = matchedEdition?.key || (!isIsbnSearch && !language ? doc.edition_key?.[0] : '');
@@ -668,8 +694,12 @@ export const GET: APIRoute = async ({ url }) => {
     }
 
     const formattedBooks = pageDocs.map((doc: any, index: number) => {
-        const edition = selectedEditions[index] || matchedEditions[index];
-      const selectedEditionId = String(edition?.key || (!isIsbnSearch && !language ? doc.edition_key?.[0] : '') || '')
+        const edition = selectedEditions[index] || matchedEditions[index] || (readableOnly ? readableEditionOf(doc) : null);
+      const fallbackEditionKey = !readableOnly && !isIsbnSearch && !language ? doc.edition_key?.[0] : '';
+      const readableCover = readableOnly && edition?.ia
+        ? `https://archive.org/services/img/${encodeURIComponent(String(edition.ia).split(',')[0])}`
+        : null;
+      const selectedEditionId = String(edition?.key || fallbackEditionKey || '')
         .match(/OL\d+M/i)?.[0].toUpperCase() || null;
       return {
         key: doc.key,
@@ -695,10 +725,12 @@ export const GET: APIRoute = async ({ url }) => {
         pubDate: edition?.publish_date || doc.first_publish_year || 'Unknown',
         isbn: isIsbnSearch
           ? normalizedIsbn
-          : edition?.isbn_13?.[0] || edition?.isbn_10?.[0] || (doc.isbn ? doc.isbn[0] : null),
+          : edition?.isbn_13?.[0] || edition?.isbn_10?.[0] || (!readableOnly && doc.isbn ? doc.isbn[0] : null),
         heroImage: edition?.covers?.[0]
           ? `https://covers.openlibrary.org/b/id/${edition.covers[0]}-M.jpg`
-          : !language && doc.cover_i
+          : readableOnly
+            ? readableCover
+            : !language && doc.cover_i
             ? `https://covers.openlibrary.org/b/id/${doc.cover_i}-M.jpg`
             : null,
 

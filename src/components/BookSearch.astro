@@ -104,6 +104,9 @@ const { libraryBooks = [] } = Astro.props;
     color: var(--muted);
     font-size: 0.82rem;
   }
+  .search-summary:empty {
+    display: none;
+  }
   .search-summary[data-state="warning"],
   .trending-status[data-state="warning"] {
     display: inline-block;
@@ -950,6 +953,9 @@ const { libraryBooks = [] } = Astro.props;
   }
 
   @media (max-width: 700px) {
+    .search-heading {
+      margin-bottom: 1rem;
+    }
     .search-heading h2 {
       font-size: 1.35rem;
     }

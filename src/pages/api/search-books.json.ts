@@ -141,7 +141,7 @@ async function fetchInternetArchiveFallback({
   authorOnly,
   isIsbnSearch,
   normalizedIsbn,
-  language,
+  languages: selectedLanguages,
   sort,
   page,
   limit,
@@ -150,7 +150,7 @@ async function fetchInternetArchiveFallback({
   authorOnly: boolean;
   isIsbnSearch: boolean;
   normalizedIsbn: string;
-  language?: string;
+  languages: string[];
   sort: string;
   page: number;
   limit: number;
@@ -162,7 +162,7 @@ async function fetchInternetArchiveFallback({
     'mediatype:texts',
     'collection:inlibrary',
   ];
-  if (language) queryParts.push(`language:${language}`);
+  if (selectedLanguages.length > 0) queryParts.push(`language:(${selectedLanguages.join(' OR ')})`);
   const params = new URLSearchParams({
     q: queryParts.join(' AND '),
     'fl[]': 'identifier,title,creator,publisher,year,language,isbn',
@@ -232,7 +232,9 @@ async function fetchInternetArchiveFallback({
 
   const totalResults = Math.min(Number(data.response?.numFound) || 0, books.length);
   const languages = Array.from(new Set(books.flatMap((book: any) => book.languages))) as string[];
-  if (language && !languages.includes(language)) languages.push(language);
+  selectedLanguages.forEach((code) => {
+    if (!languages.includes(code)) languages.push(code);
+  });
   return {
     books: books.slice((page - 1) * limit, page * limit),
     totalResults,
@@ -262,7 +264,12 @@ export const GET: APIRoute = async ({ url }) => {
   const authorOnly = url.searchParams.get('author') === '1';
   const authorKey = url.searchParams.get('author_key')?.trim();
   const authorExact = url.searchParams.get('author_exact') === '1';
-  const language = url.searchParams.get('language')?.trim();
+  // Several languages may be chosen; a book matches if it is in any of them.
+  const selectedLanguages = Array.from(new Set(url.searchParams.getAll('language')
+    .flatMap((value) => value.split(','))
+    .map((value) => value.trim().toLowerCase())
+    .filter((value) => /^[a-z]{2,4}$/.test(value))));
+  const language = selectedLanguages[0];
   const discoverLanguages = url.searchParams.get('discover_languages') === '1';
   const includeAllResults = url.searchParams.get('all_results') === '1';
   const readableOnly = url.searchParams.get('readable') === '1';
@@ -315,7 +322,7 @@ export const GET: APIRoute = async ({ url }) => {
 
   const unavailableResponse = async () => {
     const fallback = await fetchInternetArchiveFallback({
-      query, authorOnly, isIsbnSearch, normalizedIsbn, language, sort, page, limit,
+      query, authorOnly, isIsbnSearch, normalizedIsbn, languages: selectedLanguages, sort, page, limit,
     });
     return new Response(
       JSON.stringify(fallback || {
@@ -446,7 +453,7 @@ export const GET: APIRoute = async ({ url }) => {
     const languageSearchParams = new URLSearchParams(searchParams);
     languageSearchParams.set('limit', '1000');
     languageSearchParams.set('offset', '0');
-    if (language) searchParams.set('language', language);
+    selectedLanguages.forEach((code) => searchParams.append('language', code));
     const excludedWorkKeys = url.searchParams.getAll('exclude_work_key')
       .map((workKey) => workKey.trim())
       .filter((workKey) => /^\/?works\/OL\d+W$/i.test(workKey))
@@ -519,7 +526,12 @@ export const GET: APIRoute = async ({ url }) => {
       return edition?.key && ['borrowable', 'public'].includes(edition.ebook_access) ? edition : null;
     };
     const relevantDocs = readableOnly ? docs.filter(readableEditionOf) : docs;
+    const docLanguage = (doc: any) =>
+      selectedLanguages.find((code) => (doc.language || []).includes(code))
+      || languageEditionMatches.get(String(doc.key))?.languages?.[0]?.key?.split('/').pop()
+      || language;
     const fallbackEditionMatches = new Map<string, any>();
+    const languageEditionMatches = new Map<string, any>();
     const authorMatchingDocs = authorExact
       ? relevantDocs.filter((doc: any) =>
           (doc.author_name || []).some(
@@ -552,7 +564,6 @@ export const GET: APIRoute = async ({ url }) => {
         if (editions[index]) titleEditionMatches.set(String(doc.key), editions[index]);
       });
     }
-    const languageEditionMatches = new Map<string, any>();
     if (language && !readableOnly) {
       const untaggedDocs = authorMatchingDocs.filter((doc: any) =>
         (!doc.language || doc.language.length === 0) && doc.key,
@@ -560,9 +571,14 @@ export const GET: APIRoute = async ({ url }) => {
       const lookupBatchSize = 30;
       for (let offset = 0; offset < untaggedDocs.length; offset += lookupBatchSize) {
         const batch = untaggedDocs.slice(offset, offset + lookupBatchSize);
-        const editions = await mapEditionLookups(batch, (doc: any) =>
-          optionalEditionLookup(() => findEditionInLanguage(String(doc.key).replace(/^\/+/, ''), language)),
-        );
+        const editions = await mapEditionLookups(batch, async (doc: any) => {
+          for (const code of selectedLanguages) {
+            const edition = await optionalEditionLookup(() =>
+              findEditionInLanguage(String(doc.key).replace(/^\/+/, ''), code));
+            if (edition) return edition;
+          }
+          return null;
+        });
         batch.forEach((doc: any, index: number) => {
           if (editions[index]) languageEditionMatches.set(String(doc.key), editions[index]);
         });
@@ -583,11 +599,12 @@ export const GET: APIRoute = async ({ url }) => {
       : languageOptionDocs;
     const languageOptions = Array.from(new Set([
       ...languageOptionMatchingDocs.flatMap((doc: any) => doc.language || []),
-      ...(languageEditionMatches.size > 0 && language ? [language] : []),
+      ...(languageEditionMatches.size > 0 ? selectedLanguages : []),
     ])).sort();
     const matchingDocs = language && !readableOnly
       ? authorMatchingDocs.filter((doc: any) =>
-          (doc.language || []).includes(language) || languageEditionMatches.has(String(doc.key)),
+          selectedLanguages.some((code) => (doc.language || []).includes(code))
+          || languageEditionMatches.has(String(doc.key)),
         )
       : authorMatchingDocs;
     const editionPublicationYear = (doc: any) => {
@@ -652,7 +669,7 @@ export const GET: APIRoute = async ({ url }) => {
             if (!doc.key) return null;
             const docKey = String(doc.key);
             if (language) {
-              return findMatchingEdition(docKey.replace(/^\/+/, ''), normalizedPhrase, language, 2500, true);
+              return findMatchingEdition(docKey.replace(/^\/+/, ''), normalizedPhrase, docLanguage(doc), 2500, true);
             }
             return fallbackEditionMatches.get(docKey) || titleEditionMatches.get(docKey) || null;
           },
@@ -678,7 +695,7 @@ export const GET: APIRoute = async ({ url }) => {
           const coverEdition = await findMatchingEdition(
             String(doc.key).replace(/^\/+/, ''),
             normalizedPhrase,
-            language,
+            docLanguage(doc),
             2500,
             true,
           );
@@ -701,12 +718,17 @@ export const GET: APIRoute = async ({ url }) => {
         : null;
       const selectedEditionId = String(edition?.key || fallbackEditionKey || '')
         .match(/OL\d+M/i)?.[0].toUpperCase() || null;
+      const editionLanguageCodes = (edition?.languages || [])
+        .map((item: any) => item.key?.split('/').pop())
+        .filter(Boolean);
       return {
         key: doc.key,
         workKey: doc.key,
         editionKey: selectedEditionId ? `/books/${selectedEditionId}` : null,
         editionUrl: selectedEditionId ? `https://openlibrary.org/books/${selectedEditionId}` : null,
-        editionLanguage: edition?.languages?.[0]?.key?.split('/').pop() || (language && edition ? language : null),
+        editionLanguage: selectedLanguages.find((code) => editionLanguageCodes.includes(code))
+          || editionLanguageCodes[0]
+          || (language && edition ? docLanguage(doc) : null),
         editionHeroImage: edition?.covers?.[0]
           ? `https://covers.openlibrary.org/b/id/${edition.covers[0]}-M.jpg`
           : selectedEditionId
@@ -736,7 +758,7 @@ export const GET: APIRoute = async ({ url }) => {
 
         communityRating: communityRating(doc),
       };
-    }).filter((book: any) => !language || book.editionLanguage === language);
+    }).filter((book: any) => !language || selectedLanguages.includes(book.editionLanguage));
 
     return new Response(
       JSON.stringify({

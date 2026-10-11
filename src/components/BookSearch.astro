@@ -1955,10 +1955,12 @@ const { libraryBooks = [] } = Astro.props;
   }
 
   function getRecommendationLanguageLabel(languages: string[]) {
-    if (!languages.length) return 'Based on the genres in your lists and the books you rated highest.';
+    const basis = 'Picked from your favourite books and the genres you read.';
+    if (!languages.length) return basis;
     const displayNames = new Intl.DisplayNames(['en'], { type: 'language', fallback: 'none' });
     const names = languages.map((language) => displayNames.of(language) || language.toUpperCase());
-    return `Based on the genres in your lists, your highest-rated books and these languages: ${names.join(', ')}.`;
+    const list = new Intl.ListFormat('en', { type: 'conjunction' }).format(names);
+    return `${basis} Showing ${list} editions.`;
   }
 
   function renderRecommended() {

@@ -4044,7 +4044,40 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
             languageFilter.appendChild(option);
           });
           languageFilter.value = "";
-          filterRow.append(summary, languageFilter);
+          const sortFilter = document.createElement("select");
+          sortFilter.className = "edition-language-filter edition-sort-filter";
+          sortFilter.setAttribute("aria-label", "Sort editions");
+          [["", "Suggested order"], ["newest", "Newest first"], ["oldest", "Oldest first"]].forEach(([value, label]) => {
+            const option = document.createElement("option");
+            option.value = value;
+            option.textContent = label;
+            sortFilter.appendChild(option);
+          });
+          filterRow.append(summary, languageFilter, sortFilter);
+          // Open Library dates are free text ("2003", "December 1, 2003"); undated editions sort last.
+          const editionReleaseTime = (edition: any) => {
+            const text = String(edition.pubDate || "");
+            const parsed = Date.parse(text);
+            if (Number.isFinite(parsed)) return parsed;
+            const year = text.match(/\b(1[5-9]|20)\d{2}\b/)?.[0];
+            return year ? Date.UTC(Number(year), 0, 1) : null;
+          };
+          const getVisibleEditionList = () => {
+            const filtered = editions.filter((edition: any) =>
+              !languageFilter.value || normalizeEditionLanguage(String(edition.language || "")) === languageFilter.value,
+            );
+            if (!sortFilter.value) return filtered;
+            const direction = sortFilter.value === "newest" ? -1 : 1;
+            return filtered
+              .map((edition: any, index: number) => ({ edition, index, time: editionReleaseTime(edition) }))
+              .sort((first: any, second: any) => {
+                if (first.time === null || second.time === null) {
+                  return (first.time === null ? 1 : 0) - (second.time === null ? 1 : 0) || first.index - second.index;
+                }
+                return (first.time - second.time) * direction || first.index - second.index;
+              })
+              .map(({ edition }: any) => edition);
+          };
 
           const list = document.createElement("div");
           list.className = "edition-list";
@@ -4328,9 +4361,7 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
           };
 
           const renderEditionOptions = () => {
-            const filteredEditions = editions.filter((edition: any) =>
-              !languageFilter.value || normalizeEditionLanguage(String(edition.language || "")) === languageFilter.value,
-            );
+            const filteredEditions = getVisibleEditionList();
             const pageCount = Math.max(1, Math.ceil(filteredEditions.length / pageSize));
             const visibleEditions = filteredEditions.slice(
               (currentEditionPage - 1) * pageSize,
@@ -4411,26 +4442,22 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
             list.scrollTop = 0;
           });
           nextPageButton.addEventListener("click", () => {
-            const filteredCount = editions.filter((edition: any) =>
-              !languageFilter.value || normalizeEditionLanguage(String(edition.language || "")) === languageFilter.value,
-            ).length;
+            const filteredCount = getVisibleEditionList().length;
             if (currentEditionPage >= Math.ceil(filteredCount / pageSize)) return;
             currentEditionPage++;
             renderEditionOptions();
             list.scrollTop = 0;
           });
-          languageFilter.addEventListener("change", () => {
+          [languageFilter, sortFilter].forEach((filter) => filter.addEventListener("change", () => {
             currentEditionPage = 1;
             renderEditionOptions();
             list.scrollTop = 0;
-          });
+          }));
           pageJump.addEventListener("submit", (event) => {
             event.preventDefault();
             if (!pageInput.value.trim()) return;
             const requestedPage = Number(pageInput.value);
-            const filteredCount = editions.filter((edition: any) =>
-              !languageFilter.value || normalizeEditionLanguage(String(edition.language || "")) === languageFilter.value,
-            ).length;
+            const filteredCount = getVisibleEditionList().length;
             const pageCount = Math.max(1, Math.ceil(filteredCount / pageSize));
             currentEditionPage = Math.max(1, Math.min(pageCount, Math.trunc(requestedPage)));
             renderEditionOptions();

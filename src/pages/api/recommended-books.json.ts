@@ -4,6 +4,9 @@ import { mixBySubject, weightedSubjects } from '../../lib/recommendation-mix.ts'
 const CACHE_MS = 30 * 60 * 1000;
 const MAX_SEEDS = 12;
 const FAVORITE_WEIGHT = 2;
+const MAX_FAVORITE_AUTHORS = 3;
+const WORKS_PER_AUTHOR = 50;
+const MAX_AUTHOR_WORKS = 12;
 const MAX_SUBJECTS = 5;
 const WORKS_PER_SUBJECT = 50;
 const MAX_LANGUAGE_FILTER_CANDIDATES = 60;
@@ -69,19 +72,40 @@ async function getWorkKey(seed: string): Promise<string | null> {
   return typeof workKey === 'string' && /^\/works\/OL\d+W$/i.test(workKey) ? workKey : null;
 }
 
-async function subjectsForSeed(seed: string): Promise<{ workKey: string | null; subjects: string[] }> {
+async function subjectsForSeed(seed: string): Promise<{ workKey: string | null; subjects: string[]; authorKeys: string[] }> {
   const workKey = await getWorkKey(seed);
-  if (!workKey) return { workKey: null, subjects: [] };
+  if (!workKey) return { workKey: null, subjects: [], authorKeys: [] };
   const work = await fetchOpenLibrary(`${workKey}.json`);
   const subjects = Array.isArray(work?.subjects) ? work.subjects : [];
+  const authorKeys = (Array.isArray(work?.authors) ? work.authors : [])
+    .map((item: any) => String(item?.author?.key || item?.key || ''))
+    .filter((key: string) => /^\/authors\/OL\d+A$/i.test(key));
   return {
     workKey,
+    authorKeys,
     subjects: subjects.filter((subject: unknown): subject is string =>
       typeof subject === 'string'
       && subject.trim().length >= 4
       && !ignoredSubjects.has(subject.trim().toLowerCase()),
     ),
   };
+}
+
+// Other books by an author the reader loves, shaped like subject results.
+async function worksByAuthor(authorKey: string) {
+  const [author, data] = await Promise.all([
+    fetchOpenLibrary(`${authorKey}.json`).catch(() => null),
+    fetchOpenLibrary(`${authorKey}/works.json?limit=${WORKS_PER_AUTHOR}`),
+  ]);
+  const name = typeof author?.name === 'string' ? author.name : '';
+  return (Array.isArray(data?.entries) ? data.entries : [])
+    .filter((work: any) => /^\/works\/OL\d+W$/i.test(work?.key || '') && work.title)
+    .map((work: any) => ({
+      key: work.key,
+      title: work.title,
+      authors: name ? [{ key: authorKey, name }] : [],
+      cover_id: Array.isArray(work.covers) ? work.covers.find((id: unknown) => Number(id) > 0) || 0 : 0,
+    }));
 }
 
 async function mapWithConcurrency<T, R>(
@@ -222,7 +246,17 @@ export const GET: APIRoute = async ({ url }) => {
       })),
       MAX_SUBJECTS,
     );
-    if (!selectedSubjects.length) return jsonResponse({ books: [] });
+    const favoriteAuthors = Array.from(new Set(seedDetails.flatMap(({ authorKeys }, index) =>
+      favoriteSeeds.has(uniqueSeeds[index]) ? authorKeys : [],
+    ))).slice(0, MAX_FAVORITE_AUTHORS);
+    const seedWorkKeys = new Set(seedDetails.map((seed) => seed.workKey).filter((key): key is string => !!key));
+    const authorWorks = (await mapWithConcurrency(favoriteAuthors, 3, (key) => worksByAuthor(key).catch(() => [])))
+      .flat()
+      .filter((work, index, all) =>
+        !seedWorkKeys.has(work.key) && all.findIndex((item) => item.key === work.key) === index,
+      )
+      .slice(0, MAX_AUTHOR_WORKS);
+    if (!selectedSubjects.length && !authorWorks.length) return jsonResponse({ books: [] });
 
     const works = new Map<string, any>();
     const overlap = new Map<string, number>();
@@ -239,15 +273,15 @@ export const GET: APIRoute = async ({ url }) => {
       return keys;
     });
 
-    // Follow the reader's genre mix: common subjects get more of the list.
-    const seedWorkKeys = new Set(seedDetails.map((seed) => seed.workKey).filter((key): key is string => !!key));
-    const rankedWorks = mixBySubject(
+    // Favourite authors first, then follow the reader's genre mix.
+    const authorWorkKeys = new Set(authorWorks.map((work) => work.key));
+    const rankedWorks = [...authorWorks.map((work) => [work.key, { work }] as const), ...mixBySubject(
       selectedSubjects.map(({ weight }, index) => ({
         weight,
         works: subjectWorks[index].map((key) => ({ key, overlap: overlap.get(key) || 0 })),
       })),
-      seedWorkKeys,
-    ).map((key) => [key, { work: works.get(key) }] as const);
+      new Set([...seedWorkKeys, ...authorWorkKeys]),
+    ).map((key) => [key, { work: works.get(key) }] as const)];
     let books: any[];
     let partial = false;
     if (preferredLanguages.length) {

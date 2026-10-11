@@ -271,3 +271,34 @@ test('favourites must be one of the seed books', async () => {
   const response = await GET({ url: new URL(`http://localhost/api/recommended-books.json?${params}`) } as Parameters<typeof GET>[0]);
   assert.equal(response.status, 400);
 });
+
+test('other books by a favourite author come first, even without subjects', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input) => {
+    const url = new URL(String(input));
+    if (url.pathname === '/works/OL60W.json') {
+      return Response.json({ title: 'Series 1', authors: [{ author: { key: '/authors/OL7A' } }] });
+    }
+    if (url.pathname === '/authors/OL7A.json') return Response.json({ name: 'Series Writer' });
+    if (url.pathname === '/authors/OL7A/works.json') {
+      return Response.json({
+        entries: [
+          { key: '/works/OL61W', title: 'Series 2', covers: [610] },
+          { key: '/works/OL60W', title: 'Series 1' },
+        ],
+      });
+    }
+    throw new Error(`Unexpected request: ${url}`);
+  };
+  try {
+    const params = new URLSearchParams({ seed: '/works/OL60W', favorite: '/works/OL60W' });
+    const response = await GET({ url: new URL(`http://localhost/api/recommended-books.json?${params}`) } as Parameters<typeof GET>[0]);
+    assert.equal(response.status, 200);
+    const data = await response.json();
+    assert.deepEqual(data.books.map((book: any) => book.title), ['Series 2']);
+    assert.equal(data.books[0].author, 'Series Writer');
+    assert.equal(data.books[0].heroImage, 'https://covers.openlibrary.org/b/id/610-M.jpg');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

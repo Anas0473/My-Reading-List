@@ -4386,7 +4386,9 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
               }
               const details = document.createElement("span");
               const editionTitle = document.createElement("strong");
-              editionTitle.textContent = edition.title;
+              editionTitle.textContent = edition.subtitle
+                ? `${edition.title}: ${edition.subtitle}`
+                : edition.title;
               const metadata = document.createElement("span");
               metadata.textContent = [edition.language, edition.pubDate, edition.publisher]
                 .filter(Boolean)

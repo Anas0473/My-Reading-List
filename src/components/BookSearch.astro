@@ -1166,6 +1166,9 @@ const { libraryBooks = [] } = Astro.props;
   let trendingPeriod = 'daily';
   let trendingBooks: any[] = [];
   let trendingLoadedPeriod = '';
+  let trendingLoadedReadable = false;
+  const isTrendingLoaded = () =>
+    trendingLoadedPeriod === trendingPeriod && trendingLoadedReadable === currentReadableOnly;
   let trendingRequestId = 0;
   let trendingRenderedKey = '';
   let discoveryMode = 'trending';
@@ -2128,6 +2131,9 @@ const { libraryBooks = [] } = Astro.props;
   readableOnlyToggle?.addEventListener('change', () => {
     currentReadableOnly = readableOnlyToggle.checked;
     updateSearchResetButton();
+    if (!currentQuery && !trendingSection.hidden && discoveryMode === 'trending') {
+      loadTrending(trendingPeriod);
+    }
     if (currentQuery) {
       performSearch(
         currentQuery,
@@ -2312,14 +2318,14 @@ const { libraryBooks = [] } = Astro.props;
     trendingShowMoreButton.hidden = available.length <= books.length;
     trendingShowMoreButton.textContent = 'Show more trending books';
     // Skip identical re-renders so resizing never makes the covers blink.
-    const renderKey = `${trendingLoadedPeriod}|${currentHideAdded}|${books.map((book) => book.key).join(',')}`;
+    const renderKey = `${trendingLoadedPeriod}|${trendingLoadedReadable}|${currentHideAdded}|${books.map((book) => book.key).join(',')}`;
     if (renderKey === trendingRenderedKey) return;
     trendingRenderedKey = renderKey;
     if (!books.length) {
       trendingContainer.innerHTML = '';
       trendingStatus.textContent = trendingBooks.length
         ? 'Every trending book is already in your lists.'
-        : `No trending books ${trendingPeriodLabels[trendingLoadedPeriod]}.`;
+        : `No ${trendingLoadedReadable ? 'readable ' : ''}trending books ${trendingPeriodLabels[trendingLoadedPeriod]}.`;
       return;
     }
     trendingStatus.textContent = '';
@@ -2335,13 +2341,15 @@ const { libraryBooks = [] } = Astro.props;
     trendingShowMoreButton.hidden = true;
     trendingShowMoreScreens = 1;
     trendingRenderedKey = '';
+    const readable = currentReadableOnly;
     try {
-      const response = await fetch(`/api/trending-books.json?period=${encodeURIComponent(period)}&v=3`);
+      const response = await fetch(`/api/trending-books.json?period=${encodeURIComponent(period)}${readable ? '&readable=1' : ''}&v=3`);
       const data = await response.json();
       if (requestId !== trendingRequestId) return;
       if (!response.ok || data.error) throw new Error('Trending books unavailable');
       trendingBooks = Array.isArray(data.books) ? data.books : [];
       trendingLoadedPeriod = period;
+      trendingLoadedReadable = readable;
       if (discoveryMode === 'trending' && !trendingSection.hidden) renderTrending();
     } catch {
       if (requestId !== trendingRequestId) return;
@@ -2359,7 +2367,7 @@ const { libraryBooks = [] } = Astro.props;
     if (trendingSection.hidden) return;
     if (discoveryMode === 'recommended') {
       loadRecommended();
-    } else if (trendingLoadedPeriod !== trendingPeriod) {
+    } else if (!isTrendingLoaded()) {
       loadTrending(trendingPeriod);
     }
   }
@@ -2377,7 +2385,7 @@ const { libraryBooks = [] } = Astro.props;
       trendingPeriodControls.hidden = discoveryMode !== 'trending';
       if (discoveryMode === 'recommended') {
         loadRecommended();
-      } else if (trendingLoadedPeriod === trendingPeriod) {
+      } else if (isTrendingLoaded()) {
         renderTrending();
       } else {
         loadTrending(trendingPeriod);
@@ -2388,7 +2396,7 @@ const { libraryBooks = [] } = Astro.props;
   trendingTabs.forEach((tab) => {
     tab.addEventListener('click', () => {
       const period = tab.dataset.period || 'daily';
-      if (period === trendingPeriod && trendingLoadedPeriod === period) return;
+      if (period === trendingPeriod && isTrendingLoaded()) return;
       trendingPeriod = period;
       loadTrending(period);
     });

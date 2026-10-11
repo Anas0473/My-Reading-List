@@ -9,6 +9,7 @@ export type TrendingPeriod = typeof TRENDING_PERIODS[number];
 const UPSTREAM_LIMIT = MAX_PAGE_SIZE * 2;
 const CACHE_MS = 30 * 60 * 1000;
 const trendingCache = new Map<TrendingPeriod, { expiresAt: number; books: any[] }>();
+const readableTrendingCache = new Map<TrendingPeriod, { expiresAt: number; books: any[] }>();
 
 // Open Library mixes work-level data (original title, first publish year) with a cover from an
 // arbitrary edition, so ask for its matched edition and take everything shown from that edition.
@@ -81,11 +82,67 @@ async function fetchTrending(period: TrendingPeriod) {
   }
 }
 
+async function searchReadableEditions(workKeys: string[], language?: string) {
+  const params = new URLSearchParams({
+    q: `key:(${workKeys.map((key) => `"${key}"`).join(' OR ')}) AND ebook_access:[borrowable TO *]`,
+    fields: `${TRENDING_FIELDS},editions.ebook_access`,
+    limit: String(workKeys.length),
+  });
+  // With a language set, Open Library picks a readable edition in that language when there is one.
+  if (language) params.set('language', language);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10000);
+  try {
+    const response = await fetch(`https://openlibrary.org/search.json?${params}`, {
+      signal: controller.signal,
+      headers: { 'User-Agent': 'my-book-library/0.0.1' },
+    });
+    if (!response.ok) throw new Error(`Open Library responded with ${response.status}`);
+    const data = await response.json();
+    const readableWorks = new Map<string, any>();
+    for (const work of Array.isArray(data.docs) ? data.docs : []) {
+      const edition = work.editions?.docs?.[0];
+      if (edition?.key && ['borrowable', 'public'].includes(edition.ebook_access)) {
+        readableWorks.set(work.key, work);
+      }
+    }
+    return readableWorks;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+// Trending lists one edition per book, which may not be readable, so Open Library is asked for a
+// readable edition of each trending book: English first, then any language. Trending order is kept.
+async function fetchReadableTrending(period: TrendingPeriod) {
+  const cached = readableTrendingCache.get(period);
+  if (cached && cached.expiresAt > Date.now()) return cached.books;
+
+  const trending = await fetchTrending(period);
+  const workKeys: string[] = trending
+    .map((book: any) => book.workKey)
+    .filter((key: string) => /^\/works\/OL\d+W$/.test(key));
+  if (workKeys.length === 0) return [];
+  const readableWorks = await searchReadableEditions(workKeys, 'eng');
+  const remainingKeys = workKeys.filter((key) => !readableWorks.has(key));
+  if (remainingKeys.length > 0) {
+    const otherWorks = await searchReadableEditions(remainingKeys);
+    otherWorks.forEach((work, key) => readableWorks.set(key, work));
+  }
+  const books = workKeys
+    .filter((key) => readableWorks.has(key))
+    .map((key) => mapTrendingWork(readableWorks.get(key)));
+  readableTrendingCache.set(period, { expiresAt: Date.now() + CACHE_MS, books });
+  return books;
+}
+
 export const GET: APIRoute = async ({ url }) => {
   const requested = url.searchParams.get('period') as TrendingPeriod;
   const period = TRENDING_PERIODS.includes(requested) ? requested : 'weekly';
+  const readableOnly = url.searchParams.get('readable') === '1';
+  const cache = readableOnly ? readableTrendingCache : trendingCache;
   try {
-    const books = await fetchTrending(period);
+    const books = readableOnly ? await fetchReadableTrending(period) : await fetchTrending(period);
     return new Response(JSON.stringify({ period, books }), {
       headers: {
         'Content-Type': 'application/json',
@@ -93,7 +150,7 @@ export const GET: APIRoute = async ({ url }) => {
       },
     });
   } catch {
-    const stale = trendingCache.get(period)?.books;
+    const stale = cache.get(period)?.books;
     return new Response(JSON.stringify({ period, books: stale || [], error: !stale }), {
       status: stale ? 200 : 502,
       headers: { 'Content-Type': 'application/json' },

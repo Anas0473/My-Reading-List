@@ -192,6 +192,7 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
         line-height: 1.25;
       }
       .sidebar-account { margin-top: auto; }
+      .account-button[aria-busy="true"], .mobile-nav-button[aria-busy="true"] { cursor: progress; opacity: .75; }
       .account-avatar {
         position: relative;
         display: grid;
@@ -3178,7 +3179,22 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
         accountSummary.textContent = websiteUserName ? `Signed in as ${websiteUserName}` : "Signed in";
       }
 
-      function openAccountDialog() {
+      // Right after loading, wait briefly for the account checks so the right popup opens.
+      let resolveStartupAccountCheck: () => void = () => {};
+      const startupAccountCheck = new Promise<void>((resolve) => { resolveStartupAccountCheck = resolve; });
+      let startupAccountCheckDone = false;
+      let accountDialogPending = false;
+      async function openAccountDialog() {
+        if (!startupAccountCheckDone) {
+          if (accountDialogPending) return;
+          accountDialogPending = true;
+          accountButton.setAttribute("aria-busy", "true");
+          mobileAccountButton.setAttribute("aria-busy", "true");
+          await Promise.race([startupAccountCheck, new Promise((resolve) => window.setTimeout(resolve, 5000))]);
+          accountDialogPending = false;
+          accountButton.removeAttribute("aria-busy");
+          mobileAccountButton.removeAttribute("aria-busy");
+        }
         if (accountButton.classList.contains("is-connected") && accountDialog.dataset.signedIn !== "true") {
           openOpenLibrarySyncDialog();
           return;
@@ -3575,8 +3591,13 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
         handleOpenLibraryLoggedOut();
       }
       window.setTimeout(async () => {
-        await refreshWebsiteAccount();
-        await checkOpenLibraryAccount();
+        try {
+          await refreshWebsiteAccount();
+          await checkOpenLibraryAccount();
+        } finally {
+          startupAccountCheckDone = true;
+          resolveStartupAccountCheck();
+        }
         await flushOpenLibraryChanges();
         syncOpenLibraryIfDue();
       }, 500);

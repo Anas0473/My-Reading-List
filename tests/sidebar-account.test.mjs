@@ -5,7 +5,7 @@ import vm from 'node:vm';
 
 const page = readFileSync(new URL('../src/pages/index.astro', import.meta.url), 'utf8');
 const start = page.indexOf('      function updateAccountButton()');
-const end = page.indexOf('      function openAccountDialog()', start);
+const end = page.indexOf('      // Right after loading, wait briefly for the account checks', start);
 assert.ok(start >= 0 && end > start);
 
 function setup() {

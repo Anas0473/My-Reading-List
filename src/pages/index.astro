@@ -672,7 +672,7 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
       :global(.book-rating button:focus-visible) { outline: 2px solid var(--page-focus); outline-offset: 2px; }
       .controls {
         display: grid;
-        grid-template-columns: minmax(0, 1fr) max-content max-content max-content max-content max-content;
+        grid-template-columns: minmax(0, 1fr) max-content max-content max-content max-content;
         align-items: center;
         gap: 0.6rem;
         width: 100%;
@@ -684,21 +684,8 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
         background: var(--fill);
       }
       .category-panel.selection-mode .controls {
-        grid-template-columns: minmax(0, 1fr) max-content max-content max-content max-content;
+        grid-template-columns: minmax(0, 1fr) max-content max-content max-content;
         grid-template-rows: auto auto;
-      }
-      @media (min-width: 701px) and (max-width: 1180px) {
-        .controls,
-        .category-panel.selection-mode .controls {
-          display: flex;
-          flex-wrap: wrap;
-        }
-        .controls .filter-input-wrap {
-          flex: 1 1 100%;
-        }
-        .category-panel.selection-mode .batch-controls {
-          order: 1;
-        }
       }
       .category-panel.selection-mode .filter-input-wrap {
         grid-column: 1;
@@ -712,12 +699,8 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
         grid-column: 3;
         grid-row: 1;
       }
-      .category-panel.selection-mode .genre-select {
-        grid-column: 4;
-        grid-row: 1;
-      }
       .category-panel.selection-mode .reset-filters-button {
-        grid-column: 5;
+        grid-column: 4;
         grid-row: 1;
       }
       .batch-controls {
@@ -814,8 +797,7 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
       }
       .search-input,
       .sort-select,
-      .language-select,
-      .genre-select {
+      .language-select {
         height: 2.5rem;
         box-sizing: border-box;
         padding: 0.45rem 0.75rem;
@@ -836,8 +818,7 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
         color: var(--fg);
       }
       .sort-select:disabled,
-      .language-select:disabled,
-      .genre-select:disabled {
+      .language-select:disabled {
         opacity: 0.55;
       }
       .reset-filters-button {
@@ -898,14 +879,12 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
         display: none;
       }
       .sort-select,
-      .language-select,
-      .genre-select {
+      .language-select {
         width: auto;
       }
       .search-input:focus,
       .sort-select:focus,
-      .language-select:focus,
-      .genre-select:focus {
+      .language-select:focus {
         border-color: var(--page-focus);
         box-shadow: 0 0 0 3px color-mix(in srgb, var(--page-focus) 18%, transparent);
       }
@@ -1496,8 +1475,7 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
         .sort-select {
           width: 100%;
         }
-        .language-select,
-        .genre-select {
+        .language-select {
           width: 100%;
         }
         .reset-filters-button {
@@ -1670,9 +1648,6 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
                 </select>
                 <select class="language-select" aria-label="Filter this list by language">
                   <option value="">All languages</option>
-                </select>
-                <select class="genre-select" aria-label="Filter this list by genre">
-                  <option value="">All genres</option>
                 </select>
                 <button type="button" class="reset-filters-button" disabled>Reset filters</button>
               </div>
@@ -1924,27 +1899,6 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
         localStorage.setItem(editionLanguageCacheKey, JSON.stringify(editionLanguageCache));
       } catch {
         editionLanguageCache = {};
-      }
-      // Genres come from Open Library work subjects; an empty list means none were found.
-      const workGenreCacheKey = "my-book-library:work-genres";
-      function normalizeWorkId(value: string) {
-        return String(value || "").match(/OL\d+W/i)?.[0].toUpperCase() || "";
-      }
-      let workGenreCache: Record<string, string[]> = {};
-      try {
-        const cachedGenres = JSON.parse(localStorage.getItem(workGenreCacheKey) || "{}");
-        if (cachedGenres && typeof cachedGenres === "object") {
-          workGenreCache = Object.fromEntries(
-            Object.entries(cachedGenres).filter(([, genres]) =>
-              Array.isArray(genres) && genres.every((genre) => typeof genre === "string")),
-          ) as Record<string, string[]>;
-        }
-      } catch {
-        workGenreCache = {};
-      }
-      function getWorkGenres(workKey: string) {
-        const workId = normalizeWorkId(workKey);
-        return workId ? workGenreCache[workId] : undefined;
       }
       let languageLoadPromise: Promise<void> | null = null;
       let lastLanguageLoadAt = 0;
@@ -3883,51 +3837,21 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
 
         const metadata = document.createElement("dl");
         metadata.className = "category-edition-preview-meta";
-        const workKey = String(localBook?.workKey || card.dataset.workKey || "");
-        const workId = normalizeWorkId(workKey);
-        const genreText = (genres: string[] | undefined) =>
-          genres === undefined ? (workId ? "Checking…" : "Not listed") : genres.join(", ") || "Not listed";
         const metadataItems: Array<[string, string]> = [
           ["Language", getDetailLanguageName(language)],
-          ["Genres", genreText(getWorkGenres(workKey))],
           ["Published", published],
           ["Publisher", publisher],
           ["ISBN", isbn],
         ];
-        let genreDescription: HTMLElement | null = null;
         metadataItems.forEach(([label, value]) => {
           const item = document.createElement("div");
           const term = document.createElement("dt");
           term.textContent = label;
           const description = document.createElement("dd");
           description.textContent = value;
-          if (label === "Genres") genreDescription = description;
           item.append(term, description);
           metadata.appendChild(item);
         });
-        if (workId && !workGenreCache[workId]) {
-          fetch("/api/book-genres.json", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ workKeys: [workId] }),
-          })
-            .then((response) => response.ok ? response.json() : null)
-            .then((data) => {
-              const genres = data?.genres?.[workId];
-              if (Array.isArray(genres)) {
-                workGenreCache[workId] = genres;
-                try {
-                  localStorage.setItem(workGenreCacheKey, JSON.stringify(workGenreCache));
-                } catch {
-                  // Keep the in-memory value if storage is full.
-                }
-              }
-              if (genreDescription) genreDescription.textContent = Array.isArray(genres) ? genreText(genres) : "Not listed";
-            })
-            .catch(() => {
-              if (genreDescription) genreDescription.textContent = "Not listed";
-            });
-        }
         details.appendChild(metadata);
 
         const savedBook = localBooks.find((book) => localBook && isSameBook(book, localBook));
@@ -4629,9 +4553,6 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
         const languageSelect = panel.querySelector(
           ".language-select",
         ) as HTMLSelectElement;
-        const genreSelect = panel.querySelector(
-          ".genre-select",
-        ) as HTMLSelectElement;
         const resetFiltersButton = panel.querySelector(
           ".reset-filters-button",
         ) as HTMLButtonElement;
@@ -4639,9 +4560,7 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
         const grid = panel.querySelector(".cards-grid") as HTMLElement;
         const noMatchMsg = panel.querySelector(".no-match-msg") as HTMLElement;
 
-        if (!searchInput || !sortSelect || !languageSelect || !genreSelect || !grid) return;
-        let genreLoadPromise: Promise<void> | null = null;
-        let lastGenreLoadAt = 0;
+        if (!searchInput || !sortSelect || !languageSelect || !grid) return;
 
         if (panel.id === pageParams.get("panel")) {
           searchInput.value = pageParams.get("filter") || "";
@@ -4742,43 +4661,9 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
           ].includes(selectedLanguage)
             ? selectedLanguage
             : "";
-          const selectedGenre = genreSelect.value;
-          const genreCounts = new Map<string, number>();
-          let noGenreCount = 0;
-          cards.forEach((card) => {
-            const genres = getWorkGenres(card.dataset.workKey || "");
-            if (genres) card.dataset.genres = genres.join("|");
-            else delete card.dataset.genres;
-            if (genres?.length) {
-              genres.forEach((genre) => genreCounts.set(genre, (genreCounts.get(genre) || 0) + 1));
-            } else if (genres || !normalizeWorkId(card.dataset.workKey || "")) {
-              noGenreCount++;
-            }
-          });
-          const genres = [...genreCounts.keys()]
-            .sort((a, b) => (genreCounts.get(b) || 0) - (genreCounts.get(a) || 0) || a.localeCompare(b));
-          genreSelect.innerHTML = `<option value="">All genres (${cards.length})</option>`;
-          genres.forEach((genre) => {
-            const option = document.createElement("option");
-            option.value = genre;
-            option.textContent = `${genre} (${genreCounts.get(genre)})`;
-            genreSelect.appendChild(option);
-          });
-          if (noGenreCount > 0) {
-            const option = document.createElement("option");
-            option.value = "none";
-            option.textContent = `No genre listed (${noGenreCount})`;
-            genreSelect.appendChild(option);
-          }
-          genreSelect.disabled = cards.length === 0;
-          genreSelect.value = [...genres, ...(noGenreCount > 0 ? ["none"] : [])].includes(selectedGenre)
-            ? selectedGenre
-            : "";
-          const genre = genreSelect.value;
           resetFiltersButton.disabled = !query
             && sortVal === "date-added-desc"
-            && !languageSelect.value
-            && !genre;
+            && !languageSelect.value;
           if (clearFilterButton) clearFilterButton.hidden = searchInput.value.length === 0;
           const language = languageSelect.value;
 
@@ -4808,12 +4693,7 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
                 : language === "unverified"
                   ? !card.dataset.language && Boolean(normalizeEditionId(card.dataset.editionKey || ""))
                 : card.dataset.language === language);
-            const cardGenres = card.dataset.genres;
-            const matchesGenre = !genre
-              || (genre === "none"
-                ? cardGenres === "" || (cardGenres === undefined && !normalizeWorkId(card.dataset.workKey || ""))
-                : Boolean(cardGenres?.split("|").includes(genre)));
-            const matches = matchesText && matchesLanguage && matchesGenre;
+            const matches = matchesText && matchesLanguage;
 
             if (matches) {
               if (card.style.display !== "flex") card.style.display = "flex";
@@ -4936,45 +4816,6 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
           }
         }
 
-        async function loadMissingGenres() {
-          if (genreLoadPromise) return genreLoadPromise;
-          if (Date.now() - lastGenreLoadAt < 30000) return;
-          const workIds = [...new Set(Array.from(grid.querySelectorAll<HTMLElement>(".card"))
-            .map((card) => normalizeWorkId(card.dataset.workKey || ""))
-            .filter((workId) => workId && !workGenreCache[workId]))];
-          if (workIds.length === 0) return;
-          const batchSize = 40;
-          lastGenreLoadAt = Date.now();
-
-          genreLoadPromise = (async () => {
-            for (let offset = 0; offset < workIds.length; offset += batchSize) {
-              try {
-                const response = await fetch("/api/book-genres.json", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ workKeys: workIds.slice(offset, offset + batchSize) }),
-                });
-                if (!response.ok) continue;
-                const data = await response.json();
-                Object.assign(workGenreCache, data.genres || {});
-                try {
-                  localStorage.setItem(workGenreCacheKey, JSON.stringify(workGenreCache));
-                } catch {
-                  // The filter still works for this visit if storage is full.
-                }
-                updatePanel();
-              } catch {
-                break;
-              }
-            }
-          })();
-          try {
-            await genreLoadPromise;
-          } finally {
-            genreLoadPromise = null;
-          }
-        }
-
         searchInput.addEventListener("input", updatePanel);
         clearFilterButton?.addEventListener("click", () => {
           searchInput.value = "";
@@ -4983,25 +4824,17 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
         });
         sortSelect.addEventListener("change", updatePanel);
         languageSelect.addEventListener("change", updatePanel);
-        genreSelect.addEventListener("change", updatePanel);
         resetFiltersButton.addEventListener("click", () => {
           searchInput.value = "";
           sortSelect.value = "date-added-desc";
           languageSelect.value = "";
-          genreSelect.value = "";
           updatePanel();
           searchInput.focus();
         });
         updatePanel();
         panelRefreshers.set(panel.id, updatePanel);
-        panelLanguageLoaders.set(panel.id, () => {
-          void loadMissingEditionLanguages();
-          void loadMissingGenres();
-        });
-        if (panel.classList.contains("active")) {
-          void loadMissingEditionLanguages();
-          void loadMissingGenres();
-        }
+        panelLanguageLoaders.set(panel.id, () => { void loadMissingEditionLanguages(); });
+        if (panel.classList.contains("active")) void loadMissingEditionLanguages();
 
         const batchControls = panel.querySelector<HTMLElement>(".batch-controls");
         if (!batchControls) return;

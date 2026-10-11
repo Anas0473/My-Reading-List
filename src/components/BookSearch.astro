@@ -1989,7 +1989,8 @@ const { libraryBooks = [] } = Astro.props;
     }
     trendingStatus.textContent = recommendedPartial
       ? 'Some Open Library editions could not be checked. Showing the matches available; try again shortly for more.'
-      : getRecommendationLanguageLabel(getRecommendationLanguages());
+      : getRecommendationLanguageLabel(getRecommendationLanguages())
+        + (getRecommendationSeeds().seeds.length < 5 ? ' Add or rate more books for better recommendations.' : '');
     renderBookCards(trendingContainer, books);
   }
 

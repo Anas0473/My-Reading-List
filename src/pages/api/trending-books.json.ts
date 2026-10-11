@@ -1,5 +1,6 @@
 import type { APIRoute } from 'astro';
 import { MAX_PAGE_SIZE } from '../../lib/responsive-page-size';
+import { communityRating } from '../../lib/community-rating';
 
 export const TRENDING_PERIODS = ['daily', 'weekly', 'monthly'] as const;
 export type TrendingPeriod = typeof TRENDING_PERIODS[number];
@@ -15,7 +16,7 @@ const TRENDING_FIELDS = [
   'key', 'title', 'subtitle', 'author_name', 'author_key', 'cover_i', 'cover_edition_key',
   'edition_count', 'first_publish_year', 'language', 'editions', 'editions.key', 'editions.title',
   'editions.subtitle', 'editions.publish_date', 'editions.cover_i', 'editions.language',
-  'editions.publisher', 'editions.isbn',
+  'editions.publisher', 'editions.isbn', 'ratings_average', 'ratings_count',
 ].join(',');
 
 const firstValue = (value: any) => (Array.isArray(value) ? value[0] : value) || '';
@@ -53,6 +54,7 @@ export function mapTrendingWork(work: any) {
     heroImage: editionCover || (!edition && work.cover_i
       ? `https://covers.openlibrary.org/b/id/${work.cover_i}-M.jpg`
       : ''),
+    communityRating: communityRating(work),
   };
 }
 

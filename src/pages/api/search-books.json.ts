@@ -1,4 +1,5 @@
 import type { APIRoute } from 'astro';
+import { communityRating } from '../../lib/community-rating';
 import { findMatchingEdition as lookupMatchingEdition } from '../../lib/editions';
 import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } from '../../lib/responsive-page-size';
 
@@ -430,7 +431,7 @@ export const GET: APIRoute = async ({ url }) => {
           : '';
     const searchParams = new URLSearchParams({
       [searchField]: isIsbnSearch ? normalizedIsbn : authorKey || structuredQuery,
-      fields: 'title,subtitle,author_name,author_key,language,first_publish_year,cover_i,isbn,publisher,key,edition_key,edition_count',
+      fields: 'title,subtitle,author_name,author_key,language,first_publish_year,cover_i,isbn,publisher,key,edition_key,edition_count,ratings_average,ratings_count',
       limit: String(hasCompleteResultSet ? 1000 : limit),
       offset: String(hasCompleteResultSet || (useOpenLibrarySort && sort === 'title-desc') ? 0 : offset),
     });
@@ -700,6 +701,8 @@ export const GET: APIRoute = async ({ url }) => {
           : !language && doc.cover_i
             ? `https://covers.openlibrary.org/b/id/${doc.cover_i}-M.jpg`
             : null,
+
+        communityRating: communityRating(doc),
       };
     }).filter((book: any) => !language || book.editionLanguage === language);
 

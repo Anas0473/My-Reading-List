@@ -517,6 +517,22 @@ const { libraryBooks = [] } = Astro.props;
     color: var(--faint);
     font-size: 0.72rem;
   }
+  :global(.search-card p.community-rating) {
+    margin: -0.25rem 0 0.45rem;
+    color: var(--faint);
+    font-size: 0.72rem;
+  }
+  :global(.search-card p.community-rating span[aria-hidden]) {
+    font-variant-numeric: tabular-nums;
+  }
+  :global(.search-card p.community-rating .visually-hidden) {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
   :global(.edition-button),
   :global(.selected-edition-link) {
     display: block;
@@ -896,6 +912,7 @@ const { libraryBooks = [] } = Astro.props;
   import { deduplicateRecommendedBooks, isSameRecommendedBook } from '../lib/book-identity';
 
   import { getGridPageSize, observeGridPageSize, pageForNewSize } from '../lib/responsive-page-size';
+  import { communityRating, communityRatingLabel, communityRatingText } from '../lib/community-rating';
 
   const searchContainer = document.querySelector('.search-container') as HTMLElement;
   const searchInput = document.getElementById('global-book-search') as HTMLInputElement;
@@ -1179,6 +1196,10 @@ const { libraryBooks = [] } = Astro.props;
       const publicationText = book.pubDate
         ? `Published: ${escapeHtml(String(book.pubDate))}`
         : 'Publication date unknown';
+      const rating = communityRating({
+        ratings_average: book.communityRating?.average,
+        ratings_count: book.communityRating?.count,
+      });
       return `
       <div class="search-card">
         <div>
@@ -1190,6 +1211,7 @@ const { libraryBooks = [] } = Astro.props;
           ${subtitleText ? `<p class="subtitle">${subtitleText}</p>` : ''}
           <p class="author-text">${authorLinksMarkup(book.author || 'Unknown Author')}</p>
           <p class="pub-date">${publicationText}</p>
+          ${rating ? `<p class="community-rating" title="${escapeHtml(communityRatingLabel(rating))}"><span aria-hidden="true">${escapeHtml(communityRatingText(rating))}</span><span class="visually-hidden">${escapeHtml(communityRatingLabel(rating))}</span></p>` : ''}
           <a class="selected-edition-link" href="${escapeHtml(recordUrl || '#')}" target="_blank" rel="noopener noreferrer" ${recordUrl ? '' : 'hidden'}>${recordLinkLabel}</a>
           ${book.workKey ? `<button type="button" class="edition-button" data-book-index="${index}" data-preferred-edition="${escapeHtml(String(savedEditionKey || ''))}">Browse editions${book.editionCount ? ` (${book.editionCount})` : ''}</button>` : ''}
         </div>
@@ -2076,7 +2098,7 @@ const { libraryBooks = [] } = Astro.props;
     trendingShowMoreScreens = 1;
     trendingRenderedKey = '';
     try {
-      const response = await fetch(`/api/trending-books.json?period=${encodeURIComponent(period)}&v=2`);
+      const response = await fetch(`/api/trending-books.json?period=${encodeURIComponent(period)}&v=3`);
       const data = await response.json();
       if (requestId !== trendingRequestId) return;
       if (!response.ok || data.error) throw new Error('Trending books unavailable');

@@ -245,3 +245,29 @@ test('recommendations reject missing, excessive and invalid seed IDs', async () 
   const excessive = await getRecommendations(Array.from({ length: 13 }, (_, index) => `/works/OL${index + 1}W`));
   assert.equal(excessive.status, 400);
 });
+
+test('recommendations follow the genre mix of the reader’s lists', async () => {
+  const { mixBySubject } = await import('../src/lib/recommendation-mix.ts');
+  const fantasy = ['F1', 'F2', 'F3', 'F4', 'F5', 'F6'].map((key) => ({ key, overlap: 1 }));
+  const mystery = ['M1', 'M2', 'M3', 'M4'].map((key) => ({ key, overlap: 1 }));
+  const firstSix = mixBySubject([{ weight: 2, works: fantasy }, { weight: 1, works: mystery }]).slice(0, 6);
+  assert.equal(firstSix.filter((key) => key.startsWith('F')).length, 4);
+  assert.equal(firstSix.filter((key) => key.startsWith('M')).length, 2);
+});
+
+test('a favourite book counts more toward the subjects that are picked', async () => {
+  const { weightedSubjects } = await import('../src/lib/recommendation-mix.ts');
+  const books = [
+    { subjects: ['Dragons'], weight: 1 },
+    { subjects: ['Horses'], weight: 1 },
+  ];
+  assert.equal(weightedSubjects(books, 1)[0].subject, 'Dragons');
+  books[1].weight = 2;
+  assert.equal(weightedSubjects(books, 1)[0].subject, 'Horses');
+});
+
+test('favourites must be one of the seed books', async () => {
+  const params = new URLSearchParams({ seed: '/works/OL50W', favorite: '/works/OL51W' });
+  const response = await GET({ url: new URL(`http://localhost/api/recommended-books.json?${params}`) } as Parameters<typeof GET>[0]);
+  assert.equal(response.status, 400);
+});

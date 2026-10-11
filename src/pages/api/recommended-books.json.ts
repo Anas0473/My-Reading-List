@@ -1,7 +1,9 @@
 import type { APIRoute } from 'astro';
+import { mixBySubject, weightedSubjects } from '../../lib/recommendation-mix.ts';
 
 const CACHE_MS = 30 * 60 * 1000;
 const MAX_SEEDS = 12;
+const FAVORITE_WEIGHT = 2;
 const MAX_SUBJECTS = 5;
 const WORKS_PER_SUBJECT = 50;
 const MAX_LANGUAGE_FILTER_CANDIDATES = 60;
@@ -176,15 +178,18 @@ function mapRecommendedWork(work: any, edition: any = null, selectedLanguage = '
 export const GET: APIRoute = async ({ url }) => {
   const requestedSeeds = url.searchParams.getAll('seed');
   const requestedLanguages = url.searchParams.getAll('language');
+  const requestedFavorites = url.searchParams.getAll('favorite');
   if (requestedSeeds.length === 0 || requestedSeeds.length > MAX_SEEDS) {
     return jsonResponse({ error: `Provide between 1 and ${MAX_SEEDS} books for recommendations.` }, 400);
   }
-  const seeds = requestedSeeds.map((seed) => {
+  const normalizeSeed = (seed: string) => {
     const normalized = seed.startsWith('/') ? seed : `/${seed}`;
     const match = normalized.match(/^\/(works|books)\/(OL\d+[WM])$/i);
     return match ? `/${match[1].toLowerCase()}/${match[2].toUpperCase()}` : null;
-  });
-  if (seeds.some((seed) => !seed)) {
+  };
+  const seeds = requestedSeeds.map(normalizeSeed);
+  const favorites = requestedFavorites.map(normalizeSeed);
+  if (seeds.some((seed) => !seed) || favorites.some((seed) => !seed || !seeds.includes(seed))) {
     return jsonResponse({ error: 'One or more book IDs are invalid.' }, 400);
   }
   if (requestedLanguages.some((language) =>
@@ -198,7 +203,8 @@ export const GET: APIRoute = async ({ url }) => {
   }
 
   const uniqueSeeds = Array.from(new Set(seeds.filter((seed): seed is string => seed !== null)));
-  const resultCacheKey = JSON.stringify([uniqueSeeds, preferredLanguages]);
+  const favoriteSeeds = new Set(favorites);
+  const resultCacheKey = JSON.stringify([uniqueSeeds, Array.from(favoriteSeeds).sort(), preferredLanguages]);
   const cachedRecommendations = recommendationCache.get(resultCacheKey);
   if (cachedRecommendations && cachedRecommendations.expiresAt > Date.now()) {
     return jsonResponse({
@@ -209,47 +215,39 @@ export const GET: APIRoute = async ({ url }) => {
 
   try {
     const seedDetails = await mapWithConcurrency(uniqueSeeds, 4, subjectsForSeed);
-    const subjectCounts = new Map<string, { subject: string; count: number; order: number }>();
-    let nextSubjectOrder = 0;
-    for (const { subjects } of seedDetails) {
-      for (const subject of new Set(subjects)) {
-        const key = subject.trim().toLowerCase();
-        const current = subjectCounts.get(key);
-        subjectCounts.set(key, {
-          subject: current?.subject || subject.trim(),
-          count: (current?.count || 0) + 1,
-          order: current?.order ?? nextSubjectOrder++,
-        });
-      }
-    }
-    const selectedSubjects = Array.from(subjectCounts.values())
-      .sort((first, second) => second.count - first.count || first.order - second.order)
-      .slice(0, MAX_SUBJECTS);
+    const selectedSubjects = weightedSubjects(
+      seedDetails.map(({ subjects }, index) => ({
+        subjects,
+        weight: favoriteSeeds.has(uniqueSeeds[index]) ? FAVORITE_WEIGHT : 1,
+      })),
+      MAX_SUBJECTS,
+    );
     if (!selectedSubjects.length) return jsonResponse({ books: [] });
 
-    const recommendations = new Map<string, { work: any; score: number }>();
-    await mapWithConcurrency(selectedSubjects, 3, async ({ subject }) => {
+    const works = new Map<string, any>();
+    const overlap = new Map<string, number>();
+    const subjectWorks = await mapWithConcurrency(selectedSubjects, 3, async ({ subject }) => {
       const slug = subject.toLowerCase().trim().replace(/\s+/g, '_');
       const data = await fetchOpenLibrary(`/subjects/${encodeURIComponent(slug)}.json?limit=${WORKS_PER_SUBJECT}`);
-      const works = Array.isArray(data?.works) ? data.works : [];
-      for (const work of works) {
-        if (!work?.key || !/^\/works\/OL\d+W$/i.test(work.key) || !work.title) continue;
-        const current = recommendations.get(work.key);
-        recommendations.set(work.key, {
-          work: current?.work || work,
-          score: (current?.score || 0) + 1,
-        });
+      const keys: string[] = [];
+      for (const work of Array.isArray(data?.works) ? data.works : []) {
+        if (!work?.key || !/^\/works\/OL\d+W$/i.test(work.key) || !work.title || keys.includes(work.key)) continue;
+        if (!works.has(work.key)) works.set(work.key, work);
+        overlap.set(work.key, (overlap.get(work.key) || 0) + 1);
+        keys.push(work.key);
       }
+      return keys;
     });
 
-    const seedWorkKeys = new Set(seedDetails.map((seed) => seed.workKey).filter(Boolean));
-    const rankedWorks = Array.from(recommendations.entries())
-      .filter(([key]) => !seedWorkKeys.has(key))
-      .sort((first, second) =>
-        second[1].score - first[1].score
-        || (Number(second[1].work.edition_count) || 0) - (Number(first[1].work.edition_count) || 0)
-        || String(first[1].work.title).localeCompare(String(second[1].work.title)),
-      );
+    // Follow the reader's genre mix: common subjects get more of the list.
+    const seedWorkKeys = new Set(seedDetails.map((seed) => seed.workKey).filter((key): key is string => !!key));
+    const rankedWorks = mixBySubject(
+      selectedSubjects.map(({ weight }, index) => ({
+        weight,
+        works: subjectWorks[index].map((key) => ({ key, overlap: overlap.get(key) || 0 })),
+      })),
+      seedWorkKeys,
+    ).map((key) => [key, { work: works.get(key) }] as const);
     let books: any[];
     let partial = false;
     if (preferredLanguages.length) {

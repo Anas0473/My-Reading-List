@@ -1885,26 +1885,32 @@ const { libraryBooks = [] } = Astro.props;
       || libraryBooks.some((item: any) => shelfLabels[item.status] && isSameBook(item, book));
   }
 
-  function getRecommendationSeedKeys() {
+  // Favourites (4-5 stars) come first and count more; 1-2 star books are left out.
+  function getRecommendationSeeds() {
     const books = [
       ...getSavedBooks().sort((first: any, second: any) =>
         (Number(second.dateAdded) || 0) - (Number(first.dateAdded) || 0),
       ),
       ...libraryBooks.filter((book: any) => shelfLabels[book.status]),
     ];
-    const keys = new Set<string>();
+    const seen = new Set<string>();
+    const favorites: string[] = [];
+    const others: string[] = [];
     for (const book of books) {
       if (!shelfLabels[book.status]) continue;
       const workKey = String(book.workKey || book.key || '');
       const editionKey = String(book.editionKey || '');
       const seed = /^\/?works\/OL\d+W$/i.test(workKey)
         ? workKey.replace(/^\/?/, '/')
-        : editionKey;
-      if (/^\/?books\/OL\d+M$/i.test(seed)) keys.add(seed.replace(/^\/?/, '/'));
-      else if (/^\/?works\/OL\d+W$/i.test(seed)) keys.add(seed.replace(/^\/?/, '/'));
-      if (keys.size >= 12) break;
+        : editionKey.replace(/^\/?/, '/');
+      if (!/^\/(works\/OL\d+W|books\/OL\d+M)$/i.test(seed) || seen.has(seed)) continue;
+      seen.add(seed);
+      const rating = Number(book.rating) || 0;
+      if (rating && rating <= 2) continue;
+      (rating >= 4 ? favorites : others).push(seed);
     }
-    return Array.from(keys);
+    const seeds = [...favorites, ...others].slice(0, 12);
+    return { seeds, favorites: favorites.filter((seed) => seeds.includes(seed)) };
   }
 
   function getRecommendationLanguages() {
@@ -1929,10 +1935,10 @@ const { libraryBooks = [] } = Astro.props;
   }
 
   function getRecommendationLanguageLabel(languages: string[]) {
-    if (!languages.length) return 'Based on the subjects of books in your lists.';
+    if (!languages.length) return 'Based on the genres in your lists and the books you rated highest.';
     const displayNames = new Intl.DisplayNames(['en'], { type: 'language', fallback: 'none' });
     const names = languages.map((language) => displayNames.of(language) || language.toUpperCase());
-    return `Based on your lists and their languages: ${names.join(', ')}.`;
+    return `Based on the genres in your lists, your highest-rated books and these languages: ${names.join(', ')}.`;
   }
 
   function renderRecommended() {
@@ -1966,9 +1972,9 @@ const { libraryBooks = [] } = Astro.props;
   }
 
   async function loadRecommended() {
-    const seeds = getRecommendationSeedKeys();
+    const { seeds, favorites } = getRecommendationSeeds();
     const languages = getRecommendationLanguages();
-    const seedKey = seeds.join('|');
+    const seedKey = `${seeds.join('|')}|${favorites.join('|')}`;
     const requestKey = `${seedKey}|${languages.join(',')}`;
     if (!seeds.length) {
       recommendedBooks = [];
@@ -1994,6 +2000,7 @@ const { libraryBooks = [] } = Astro.props;
     try {
       const params = new URLSearchParams();
       seeds.forEach((seed) => params.append('seed', seed));
+      favorites.forEach((seed) => params.append('favorite', seed));
       languages.forEach((language) => params.append('language', language));
       const response = await fetch(`/api/recommended-books.json?${params}`);
       const data = await response.json();

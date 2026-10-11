@@ -4053,7 +4053,7 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
             option.textContent = label;
             sortFilter.appendChild(option);
           });
-          filterRow.append(summary, languageFilter, sortFilter);
+          filterRow.append(summary, sortFilter, languageFilter);
           // Open Library dates are free text ("2003", "December 1, 2003"); undated editions sort last.
           const editionReleaseTime = (edition: any) => {
             const text = String(edition.pubDate || "");

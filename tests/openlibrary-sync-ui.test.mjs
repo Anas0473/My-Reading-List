@@ -34,6 +34,8 @@ function setup(books, responseBooks = books, incompleteShelves = []) {
     cloudLibrary: { sync: async () => true },
     flushOpenLibraryChanges: async () => {},
     readPendingOpenLibraryChanges: () => [],
+    openLibrarySyncRunning: false,
+    updateAccountButton: () => {},
     fetch: () => new Promise((resolve) => { finishRequest = resolve; }),
     createSyncBookIndex: (items, matches) => ({
       findIndex: (book) => items.findIndex((item) => matches(item, book)),

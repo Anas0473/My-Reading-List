@@ -218,6 +218,16 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
         border-radius: 50%;
         background: var(--ok);
       }
+      .account-button.is-syncing .account-avatar::after {
+        background: var(--accent);
+        animation: account-sync-pulse 1.2s ease-in-out infinite;
+      }
+      @keyframes account-sync-pulse {
+        50% { opacity: 0.35; }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .account-button.is-syncing .account-avatar::after { animation: none; }
+      }
       .account-button-copy { display: grid; gap: 0.25rem; min-width: 0; text-align: left; }
       .account-button-status { font-size: 0.7rem; color: var(--muted); }
       .account-button-label {
@@ -1807,7 +1817,7 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
           </div>
           <ul class="open-library-account-facts">
             <li>Books you add, move or delete here update Open Library.</li>
-            <li>Changes made on Open Library arrive every 15 minutes, or when you sync.</li>
+            <li>Changes made on Open Library arrive when you open the site, every 15 minutes, or when you sync.</li>
           </ul>
         </div>
         <p class="open-library-sync-message" id="open-library-sync-message" role="status" aria-live="polite"></p>
@@ -2399,6 +2409,9 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
       let openLibraryShelfSnapshot = shelfSnapshot(localBooks);
       let openLibraryFlush: Promise<void> | null = null;
       let openLibraryRetryTimer = 0;
+      // Until the first Open Library sync after opening the site finishes, the sidebar says it's syncing.
+      let openLibraryStartupSyncPending = Boolean(localStorage.getItem(openLibraryPushUserKey));
+      let openLibrarySyncRunning = false;
 
       function refreshLibraryView() {
         document.querySelectorAll("[data-local-book-key]").forEach((card) => card.remove());
@@ -3257,12 +3270,16 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
           : Boolean(websiteUserId);
         const openLibraryOnly = !signedIn && Boolean(cloudReauthenticationRequired ? null : getOpenLibraryPushUser());
         const connected = signedIn || openLibraryOnly;
+        const openLibrarySyncing = openLibraryOnly && (openLibraryStartupSyncPending || openLibrarySyncRunning);
         accountButtonLabel.textContent = signedIn
           ? (websiteUserName || "Signed in")
+          : openLibrarySyncing ? "Syncing Open Library…"
           : openLibraryOnly ? "Open Library connected" : "Sign in to sync";
         accountButtonStatus.textContent = signedIn
           ? "Manage account"
+          : openLibrarySyncing ? "Checking for new books"
           : openLibraryOnly ? "Your reading lists are connected" : "Sync your reading lists";
+        accountButton.classList.toggle("is-syncing", openLibrarySyncing);
         const avatarUrl = signedIn ? websiteUserImage : null;
         if (avatarUrl) {
           if (accountAvatarImage.getAttribute("src") !== avatarUrl) {
@@ -3333,8 +3350,14 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
           return running.promise;
         }
         const state = { quiet: Boolean(options.quiet), sendLocalOnlyBooks: Boolean(options.sendLocalOnlyBooks) };
+        openLibrarySyncRunning = true;
+        updateAccountButton();
         const promise = runOpenLibrarySync(username, Boolean(options.confirmed), state)
-          .finally(() => { openLibrarySyncInProgress = null; });
+          .finally(() => {
+            openLibrarySyncInProgress = null;
+            openLibrarySyncRunning = false;
+            updateAccountButton();
+          });
         openLibrarySyncInProgress = { username, promise, state };
         return promise;
       }
@@ -3697,14 +3720,35 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
       }
       window.setTimeout(async () => {
         try {
-          await refreshWebsiteAccount();
-          await checkOpenLibraryAccount();
+          try {
+            await refreshWebsiteAccount();
+            await checkOpenLibraryAccount();
+          } finally {
+            startupAccountCheckDone = true;
+            resolveStartupAccountCheck();
+          }
+          await flushOpenLibraryChanges();
+          const startupUser = cloudReauthenticationRequired ? null : getOpenLibraryPushUser();
+          if (startupUser) {
+            // Always check Open Library when the site is opened, so books added there show up.
+            const startupSync = syncOpenLibrary(startupUser, { quiet: true });
+            openLibrarySyncSubmit.disabled = true;
+            // Show the box once per visit (not on every reload) so the sync can be followed.
+            const startupBoxKey = "my-book-library:openlibrary-startup-box-shown";
+            if (
+              accountDialog.dataset.openLibraryOnly === "true"
+              && !sessionStorage.getItem(startupBoxKey)
+              && !document.querySelector("dialog[open]")
+            ) {
+              sessionStorage.setItem(startupBoxKey, "1");
+              openOpenLibrarySyncDialog();
+            }
+            await startupSync;
+          }
         } finally {
-          startupAccountCheckDone = true;
-          resolveStartupAccountCheck();
+          openLibraryStartupSyncPending = false;
+          updateAccountButton();
         }
-        await flushOpenLibraryChanges();
-        syncOpenLibraryIfDue();
       }, 500);
       document.addEventListener("visibilitychange", () => {
         if (document.visibilityState === "visible") {

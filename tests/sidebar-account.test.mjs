@@ -18,6 +18,7 @@ function setup() {
   const context = vm.createContext({
     websiteUserId: 'user-A', websiteUserName: 'Alice', websiteUserImage: 'https://example.com/alice.jpg',
     websiteOwner: 'clerk:user-A', cloudReauthenticationRequired: false,
+    openLibraryStartupSyncPending: false, openLibrarySyncRunning: false,
     getOpenLibraryPushUser: () => null,
     accountButton: element(), mobileAccountButton: element(), accountDialog: element(),
     accountButtonLabel: {}, accountButtonStatus: {}, accountSummary: {},
@@ -59,6 +60,22 @@ test('accounts without a photo and Open Library-only accounts use the fallback',
   assert.equal(context.accountButtonLabel.textContent, 'Open Library connected');
   assert.equal(context.accountDialog.dataset.openLibraryOnly, 'true');
   assert.equal(context.accountAvatarImage.hidden, true);
+});
+
+test('Open Library-only accounts say they are syncing until the sync finishes', () => {
+  const context = setup();
+  context.websiteUserId = null;
+  context.getOpenLibraryPushUser = () => 'reader';
+  context.openLibraryStartupSyncPending = true;
+  context.updateAccountButton();
+  assert.equal(context.accountButtonLabel.textContent, 'Syncing Open Library…');
+  context.openLibraryStartupSyncPending = false;
+  context.openLibrarySyncRunning = true;
+  context.updateAccountButton();
+  assert.equal(context.accountButtonLabel.textContent, 'Syncing Open Library…');
+  context.openLibrarySyncRunning = false;
+  context.updateAccountButton();
+  assert.equal(context.accountButtonLabel.textContent, 'Open Library connected');
 });
 
 test('website accounts hide Open Library-only badges even with a legacy connection', () => {

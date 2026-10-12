@@ -1039,6 +1039,7 @@ const { libraryBooks = [] } = Astro.props;
 
   import { getGridPageSize, observeGridPageSize, pageForNewSize } from '../lib/responsive-page-size';
   import { communityRating, communityRatingLabel, communityRatingText } from '../lib/community-rating';
+  import { cachedCoverUrl } from '../lib/cover-url';
 
   const searchContainer = document.querySelector('.search-container') as HTMLElement;
   const searchInput = document.getElementById('global-book-search') as HTMLInputElement;
@@ -1409,12 +1410,12 @@ const { libraryBooks = [] } = Astro.props;
       const firstEditionKey = Array.isArray(book.editionKeys) ? book.editionKeys[0] : null;
       const savedEditionKey = matchedSavedBook?.editionKey || book.editionKey || firstEditionKey;
       const savedEditionId = String(savedEditionKey || '').match(/OL\d+M/i)?.[0];
-      const coverImage = matchedSavedBook?.editionHeroImage
+      const coverImage = cachedCoverUrl(matchedSavedBook?.editionHeroImage
         || book.editionHeroImage
         || (savedEditionId
           ? `https://covers.openlibrary.org/b/olid/${savedEditionId}-M.jpg?default=false`
           : null)
-        || book.heroImage;
+        || book.heroImage);
       const editionUrl = matchedSavedBook?.editionUrl
         || book.editionUrl
         || (savedEditionId ? `https://openlibrary.org/books/${savedEditionId}` : '');
@@ -1466,7 +1467,7 @@ const { libraryBooks = [] } = Astro.props;
 
     container.querySelectorAll<HTMLElement>('.search-card').forEach((card, index) => {
       const image = card.querySelector<HTMLImageElement>('img');
-      const fallback = books[index].heroImage;
+      const fallback = cachedCoverUrl(books[index].heroImage);
       if (image && fallback) image.dataset.fallbackImage = fallback;
       const title = card.querySelector<HTMLElement>('h5');
       if (title) {

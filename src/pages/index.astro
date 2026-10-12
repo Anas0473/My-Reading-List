@@ -1861,6 +1861,7 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
       import { createBookRating, isBookRating } from "../lib/book-rating";
       import { mergeOpenLibraryImport } from "../lib/openlibrary-import";
       import { createCloudLibraryClient } from "../lib/cloud-library-client";
+      import { cachedCoverUrl } from "../lib/cover-url";
       import { $clerkStore } from "@clerk/astro/client";
       import { createSyncBookIndex } from "../lib/sync-book-index";
       import {
@@ -2272,8 +2273,8 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
 
         const details = document.createElement("div");
         details.className = "local-book-details";
-        const fallbackImage = book.heroImage;
-        const selectedEditionImage = book.editionHeroImage;
+        const fallbackImage = cachedCoverUrl(book.heroImage);
+        const selectedEditionImage = cachedCoverUrl(book.editionHeroImage);
         if (selectedEditionImage || fallbackImage) {
           const image = document.createElement("img");
           image.src = selectedEditionImage || fallbackImage;
@@ -4335,7 +4336,7 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
 
             const body = document.createElement("div");
             body.className = "category-edition-preview-body";
-            const coverUrl = String(edition.coverImage || "");
+            const coverUrl = String(cachedCoverUrl(edition.coverImage) || "");
             if (coverUrl) {
               const cover = document.createElement("img");
               cover.className = "category-edition-preview-cover";
@@ -4607,7 +4608,7 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
                   placeholder.textContent = "No cover";
                   cover.replaceWith(placeholder);
                 }, { once: true });
-                (cover as HTMLImageElement).src = edition.coverImage;
+                (cover as HTMLImageElement).src = String(cachedCoverUrl(edition.coverImage));
               } else {
                 cover.className = "edition-option-no-cover";
                 cover.textContent = "No cover";

@@ -3694,6 +3694,7 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
       });
       openLibrarySyncDialog.addEventListener("close", () => {
         openLibraryBackButton.hidden = true;
+        window.clearTimeout(openLibrarySyncCloseTimer);
       });
       accountButton.addEventListener("click", openAccountDialog);
       mobileAccountButton.addEventListener("click", openAccountDialog);
@@ -3751,11 +3752,25 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
         if (isOutside) openLibrarySyncDialog.close();
       });
 
-      openLibrarySyncForm.addEventListener("submit", (event) => {
+      let openLibrarySyncCloseTimer = 0;
+      function closeOpenLibrarySyncAfterSuccess() {
+        window.clearTimeout(openLibrarySyncCloseTimer);
+        if (!openLibrarySyncDialog.open || openLibrarySyncMessage.textContent !== "Up to date.") return;
+        openLibrarySyncCloseTimer = window.setTimeout(() => {
+          if (openLibrarySyncDialog.open && !openLibrarySyncInProgress
+            && openLibrarySyncMessage.textContent === "Up to date.") {
+            openLibrarySyncDialog.close();
+          }
+        }, 1200);
+      }
+
+      openLibrarySyncForm.addEventListener("submit", async (event) => {
         event.preventDefault();
+        window.clearTimeout(openLibrarySyncCloseTimer);
         const pushUser = getOpenLibraryPushUser();
         if (pushUser && !cloudReauthenticationRequired) {
-          syncOpenLibrary(pushUser, { sendLocalOnlyBooks: true });
+          await syncOpenLibrary(pushUser, { sendLocalOnlyBooks: true });
+          closeOpenLibrarySyncAfterSuccess();
         } else {
           logInToOpenLibrary();
         }
@@ -3784,15 +3799,7 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
             const startupBoxOpened = accountDialog.dataset.openLibraryOnly === "true" && !document.querySelector("dialog[open]");
             if (startupBoxOpened) openOpenLibrarySyncDialog();
             await startupSync;
-            // Close the box shortly after a clean sync; errors and warnings stay visible.
-            if (startupBoxOpened && openLibrarySyncMessage.textContent === "Up to date.") {
-              window.setTimeout(() => {
-                if (openLibrarySyncDialog.open && !openLibrarySyncInProgress
-                  && openLibrarySyncMessage.textContent === "Up to date.") {
-                  openLibrarySyncDialog.close();
-                }
-              }, 1200);
-            }
+            if (startupBoxOpened) closeOpenLibrarySyncAfterSuccess();
           }
         } finally {
           openLibraryStartupSyncPending = false;

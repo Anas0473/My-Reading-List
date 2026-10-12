@@ -130,6 +130,24 @@ test('cloud client retains offline edits across a reload', async () => {
   assert.equal(activeCloudBooks(remote).length, 2);
 });
 
+test('cloud client reports when a sync starts and finishes, even if it fails', async () => {
+  const states: boolean[] = [];
+  let online = true;
+  const client = createCloudLibraryClient({
+    storage: memoryStorage(), getBooks: () => [], setBooks: () => {}, message: () => {},
+    syncing: (busy) => states.push(busy),
+    request: async () => {
+      if (!online) throw new TypeError('Offline');
+      return Response.json({ username: 'reader', revision: 0, books: {} });
+    },
+  });
+  assert.equal(await client.connect('reader'), true);
+  assert.deepEqual(states, [true, false]);
+  online = false;
+  assert.equal(await client.sync(), false);
+  assert.deepEqual(states, [true, false, true, false]);
+});
+
 test('account switching backs up the previous library without uploading it to the new account', async () => {
   const storage = memoryStorage();
   let books = [edition('/books/OL1M')];

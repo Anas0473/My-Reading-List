@@ -15,6 +15,7 @@ interface ClientOptions {
   setBooks: (books: CloudBook[]) => void;
   message: (message: string) => void;
   accountChanged?: () => void;
+  syncing?: (busy: boolean) => void;
   request?: typeof fetch;
 }
 
@@ -143,7 +144,13 @@ export function createCloudLibraryClient(options: ClientOptions) {
   function sync(): Promise<boolean> {
     capture();
     if (!enabled || !username || !state) return Promise.resolve(true);
-    if (!running) running = synchronize().finally(() => { running = null; });
+    if (!running) {
+      options.syncing?.(true);
+      running = synchronize().finally(() => {
+        running = null;
+        options.syncing?.(false);
+      });
+    }
     return running;
   }
 

@@ -324,6 +324,7 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
       .open-library-sync-back[hidden] { display: none; }
       .open-library-sync-close svg { width: 1rem; height: 1rem; }
       .open-library-sync-close:hover { background: var(--surface-dark-2); color: var(--text-dark); }
+      .open-library-sync-close:disabled { opacity: 0.4; background: transparent; cursor: progress; }
       #open-library-sync-dialog::backdrop,
       #open-library-import-dialog::backdrop {
         background: rgba(0, 0, 0, 0.6);
@@ -613,6 +614,7 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
         opacity: 0.6;
         cursor: progress;
       }
+      .open-library-sync-actions button[type="button"]:disabled { opacity: 0.4; }
       main {
         min-width: 0;
         padding: 1.75rem 2.5rem 3rem;
@@ -2409,9 +2411,15 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
       let openLibraryShelfSnapshot = shelfSnapshot(localBooks);
       let openLibraryFlush: Promise<void> | null = null;
       let openLibraryRetryTimer = 0;
-      // Until the first Open Library sync after opening the site finishes, the sidebar says it's syncing.
-      let openLibraryStartupSyncPending = Boolean(localStorage.getItem(openLibraryPushUserKey));
+      // Until the first syncs after opening the site finish, the sidebar says it's syncing.
+      let openLibraryStartupSyncPending = Boolean(localStorage.getItem(openLibraryPushUserKey))
+        || accountButton.dataset.initialSignedIn === "true";
       let openLibrarySyncRunning = false;
+      let cloudSyncRunning = false;
+      // While Open Library syncs, its box can't be closed, but never for longer than this.
+      const openLibrarySyncLockMs = 60000;
+      let openLibrarySyncLockTimer = 0;
+      let openLibrarySyncLocked = false;
 
       function refreshLibraryView() {
         document.querySelectorAll("[data-local-book-key]").forEach((card) => card.remove());
@@ -2441,6 +2449,10 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
         message: (message) => {
           cloudLibraryStatus.hidden = !message;
           cloudLibraryStatus.textContent = message;
+        },
+        syncing: (busy) => {
+          cloudSyncRunning = busy;
+          updateAccountButton();
         },
       });
 
@@ -3271,15 +3283,16 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
         const openLibraryOnly = !signedIn && Boolean(cloudReauthenticationRequired ? null : getOpenLibraryPushUser());
         const connected = signedIn || openLibraryOnly;
         const openLibrarySyncing = openLibraryOnly && (openLibraryStartupSyncPending || openLibrarySyncRunning);
+        const websiteSyncing = signedIn && (openLibraryStartupSyncPending || openLibrarySyncRunning || cloudSyncRunning);
         accountButtonLabel.textContent = signedIn
           ? (websiteUserName || "Signed in")
           : openLibrarySyncing ? "Syncing Open Library…"
           : openLibraryOnly ? "Open Library connected" : "Sign in to sync";
         accountButtonStatus.textContent = signedIn
-          ? "Manage account"
+          ? websiteSyncing ? "Syncing your library…" : "Manage account"
           : openLibrarySyncing ? "Checking for new books"
           : openLibraryOnly ? "Your reading lists are connected" : "Sync your reading lists";
-        accountButton.classList.toggle("is-syncing", openLibrarySyncing);
+        accountButton.classList.toggle("is-syncing", openLibrarySyncing || websiteSyncing);
         const avatarUrl = signedIn ? websiteUserImage : null;
         if (avatarUrl) {
           if (accountAvatarImage.getAttribute("src") !== avatarUrl) {
@@ -3352,11 +3365,13 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
         const state = { quiet: Boolean(options.quiet), sendLocalOnlyBooks: Boolean(options.sendLocalOnlyBooks) };
         openLibrarySyncRunning = true;
         updateAccountButton();
+        setOpenLibrarySyncLocked(true);
         const promise = runOpenLibrarySync(username, Boolean(options.confirmed), state)
           .finally(() => {
             openLibrarySyncInProgress = null;
             openLibrarySyncRunning = false;
             updateAccountButton();
+            setOpenLibrarySyncLocked(false);
           });
         openLibrarySyncInProgress = { username, promise, state };
         return promise;
@@ -3668,6 +3683,7 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
         }
       });
       openLibraryBackButton.addEventListener("click", () => {
+        if (openLibrarySyncLocked) return;
         openLibrarySyncDialog.close();
         accountDialog.showModal();
       });
@@ -3690,13 +3706,40 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
         if (canAutoFocusTextFields()) getOpenLibraryLoginInput().focus();
       });
       openLibraryLogoutButton.addEventListener("click", logOutOfOpenLibrary);
+      function setOpenLibrarySyncLocked(locked: boolean) {
+        window.clearTimeout(openLibrarySyncLockTimer);
+        openLibrarySyncLocked = locked;
+        openLibrarySyncCancel.disabled = locked;
+        for (const id of ["open-library-sync-close", "open-library-sync-back"]) {
+          const button = document.getElementById(id) as HTMLButtonElement | null;
+          if (button) button.disabled = locked;
+        }
+        if (locked) {
+          openLibrarySyncLockTimer = window.setTimeout(() => {
+            setOpenLibrarySyncLocked(false);
+            if (openLibrarySyncDialog.open && openLibrarySyncInProgress) {
+              openLibrarySyncMessage.textContent = "Open Library is slow. The sync continues in the background, so you can close this box.";
+            }
+          }, openLibrarySyncLockMs);
+        }
+      }
+
       openLibrarySyncCancel.addEventListener("click", () => {
-        openLibrarySyncDialog.close();
+        if (!openLibrarySyncLocked) openLibrarySyncDialog.close();
       });
-      document.getElementById("open-library-sync-close")?.addEventListener("click", () => openLibrarySyncDialog.close());
+      document.getElementById("open-library-sync-close")?.addEventListener("click", () => {
+        if (!openLibrarySyncLocked) openLibrarySyncDialog.close();
+      });
+      // Escape would close the box mid-sync, so block it while syncing.
+      openLibrarySyncDialog.addEventListener("keydown", (event) => {
+        if (event.key === "Escape" && openLibrarySyncLocked) event.preventDefault();
+      });
+      openLibrarySyncDialog.addEventListener("cancel", (event) => {
+        if (openLibrarySyncLocked) event.preventDefault();
+      });
 
       openLibrarySyncDialog.addEventListener("click", (event) => {
-        if (event.target !== openLibrarySyncDialog) return;
+        if (event.target !== openLibrarySyncDialog || openLibrarySyncLocked) return;
         const rect = openLibrarySyncDialog.getBoundingClientRect();
         const isOutside = event.clientX < rect.left || event.clientX > rect.right ||
           event.clientY < rect.top || event.clientY > rect.bottom;

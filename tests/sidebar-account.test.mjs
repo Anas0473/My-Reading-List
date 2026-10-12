@@ -18,7 +18,7 @@ function setup() {
   const context = vm.createContext({
     websiteUserId: 'user-A', websiteUserName: 'Alice', websiteUserImage: 'https://example.com/alice.jpg',
     websiteOwner: 'clerk:user-A', cloudReauthenticationRequired: false,
-    openLibraryStartupSyncPending: false, openLibrarySyncRunning: false,
+    openLibraryStartupSyncPending: false, openLibrarySyncRunning: false, cloudSyncRunning: false,
     getOpenLibraryPushUser: () => null,
     accountButton: element(), mobileAccountButton: element(), accountDialog: element(),
     accountButtonLabel: {}, accountButtonStatus: {}, accountSummary: {},
@@ -76,6 +76,17 @@ test('Open Library-only accounts say they are syncing until the sync finishes', 
   context.openLibrarySyncRunning = false;
   context.updateAccountButton();
   assert.equal(context.accountButtonLabel.textContent, 'Open Library connected');
+});
+
+test('website accounts say they are syncing until their library sync finishes', () => {
+  const context = setup();
+  context.cloudSyncRunning = true;
+  context.updateAccountButton();
+  assert.equal(context.accountButtonLabel.textContent, 'Alice');
+  assert.equal(context.accountButtonStatus.textContent, 'Syncing your library…');
+  context.cloudSyncRunning = false;
+  context.updateAccountButton();
+  assert.equal(context.accountButtonStatus.textContent, 'Manage account');
 });
 
 test('website accounts hide Open Library-only badges even with a legacy connection', () => {

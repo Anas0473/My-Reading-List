@@ -36,6 +36,7 @@ function setup(books, responseBooks = books, incompleteShelves = []) {
     readPendingOpenLibraryChanges: () => [],
     openLibrarySyncRunning: false,
     updateAccountButton: () => {},
+    setOpenLibrarySyncLocked: () => {},
     fetch: () => new Promise((resolve) => { finishRequest = resolve; }),
     createSyncBookIndex: (items, matches) => ({
       findIndex: (book) => items.findIndex((item) => matches(item, book)),

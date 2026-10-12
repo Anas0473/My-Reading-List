@@ -3780,10 +3780,18 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
             const startupSync = syncOpenLibrary(startupUser, { quiet: true });
             openLibrarySyncSubmit.disabled = true;
             // Show the box so the sync can be followed.
-            if (accountDialog.dataset.openLibraryOnly === "true" && !document.querySelector("dialog[open]")) {
-              openOpenLibrarySyncDialog();
-            }
+            const startupBoxOpened = accountDialog.dataset.openLibraryOnly === "true" && !document.querySelector("dialog[open]");
+            if (startupBoxOpened) openOpenLibrarySyncDialog();
             await startupSync;
+            // Close the box shortly after a clean sync; errors and warnings stay visible.
+            if (startupBoxOpened && openLibrarySyncMessage.textContent === "Up to date.") {
+              window.setTimeout(() => {
+                if (openLibrarySyncDialog.open && !openLibrarySyncInProgress
+                  && openLibrarySyncMessage.textContent === "Up to date.") {
+                  openLibrarySyncDialog.close();
+                }
+              }, 1200);
+            }
           }
         } finally {
           openLibraryStartupSyncPending = false;

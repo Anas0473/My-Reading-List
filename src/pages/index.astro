@@ -1862,6 +1862,7 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
       import { mergeOpenLibraryImport } from "../lib/openlibrary-import";
       import { createCloudLibraryClient } from "../lib/cloud-library-client";
       import { cachedCoverUrl } from "../lib/cover-url";
+      import { keepTypingFocus } from "../lib/keep-typing-focus";
       import { $clerkStore } from "@clerk/astro/client";
       import { createSyncBookIndex } from "../lib/sync-book-index";
       import {
@@ -3806,6 +3807,7 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
           updateAccountButton();
         }
       }, 500);
+      keepTypingFocus();
       document.addEventListener("visibilitychange", () => {
         if (document.visibilityState === "visible") {
           void refreshWebsiteAccount();

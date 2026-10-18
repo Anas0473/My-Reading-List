@@ -3265,7 +3265,9 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
       function syncOpenLibraryIfDue() {
         const username = getOpenLibraryPushUser();
         if (!username || cloudReauthenticationRequired || readPendingOpenLibraryChanges().length > 0) return;
-        if (openLibrarySyncDue()) syncOpenLibrary(username, { quiet: true });
+        if (openLibrarySyncDue()) {
+          void syncOpenLibrary(username, { quiet: true }).then(closeOpenLibrarySyncAfterSuccess);
+        }
       }
 
       function updateOpenLibrarySyncLabel() {
@@ -3800,7 +3802,8 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
             const startupBoxOpened = accountDialog.dataset.openLibraryOnly === "true" && !document.querySelector("dialog[open]");
             if (startupBoxOpened) openOpenLibrarySyncDialog();
             await startupSync;
-            if (startupBoxOpened) closeOpenLibrarySyncAfterSuccess();
+            // Close it whether the site or you opened it during the sync.
+            closeOpenLibrarySyncAfterSuccess();
           }
         } finally {
           openLibraryStartupSyncPending = false;

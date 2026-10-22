@@ -16,7 +16,8 @@ bottom sidebar account card, or beside the site title on mobile. This direct
 link has a "Privacy policy" tooltip and accessible label and is independent of
 sign-in, including Open Library-only connections. The sidebar
 account card stays anchored at the bottom, with no extra footer below it.
-The website-account dialog also retains its privacy policy link.
+The website-account dialog also shows a privacy policy link during sign-in and
+sign-up, but hides this duplicate once signed in.
 The desktop account and privacy link share a flat, borderless row with
 a subtle shared hover background. The connected Open Library dialog uses an
 unboxed account summary and sync notes rather than a nested card.

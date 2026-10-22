@@ -2533,9 +2533,6 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
       if (document.getElementById("website-account")?.dataset.configured === "true") {
         let observedUser: string | null | undefined;
         const profile = document.getElementById("website-profile") as HTMLButtonElement;
-        const profileDialog = document.getElementById("website-profile-dialog") as HTMLDialogElement;
-        const profileMount = document.getElementById("website-profile-mount") as HTMLDivElement;
-        let profileMounted = false;
         const signOut = document.getElementById("website-sign-out") as HTMLButtonElement;
         const googleButton = document.getElementById("account-google") as HTMLButtonElement;
         const emailForm = document.getElementById("account-email-form") as HTMLFormElement;
@@ -2885,32 +2882,12 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
             return;
           }
           accountDialog.close();
-          profileDialog.showModal();
-          if (!profileMounted) {
-            // Clerk's own account panel, shown inside the site's box so it gets back/close buttons.
-            clerk.mountUserProfile(profileMount, {
-              appearance: {
-                elements: {
-                  rootBox: { width: "100%", height: "100%" },
-                  cardBox: { width: "100%", maxWidth: "100%", height: "100%", border: "0", borderRadius: "0", boxShadow: "none" },
-                  navbar: { paddingTop: "3rem" },
-                  pageScrollBox: { paddingTop: "3rem" },
-                },
-              },
-            });
-            profileMounted = true;
+          try {
+            clerk.openUserProfile();
+          } catch (error) {
+            cloudLibraryStatus.textContent = error instanceof Error ? error.message : "Could not open account settings. Please try again.";
+            accountDialog.showModal();
           }
-        });
-        document.getElementById("website-profile-back")?.addEventListener("click", () => {
-          profileDialog.close();
-          accountDialog.showModal();
-        });
-        document.getElementById("website-profile-close")?.addEventListener("click", () => profileDialog.close());
-        profileDialog.addEventListener("click", (event) => {
-          if (event.target !== profileDialog) return;
-          const rect = profileDialog.getBoundingClientRect();
-          if (event.clientX < rect.left || event.clientX > rect.right
-            || event.clientY < rect.top || event.clientY > rect.bottom) profileDialog.close();
         });
         signOut.addEventListener("click", async () => {
           const clerk = $clerkStore.get();
@@ -2940,11 +2917,7 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
             websiteUserName = user?.firstName || user?.username || null;
             websiteUserImage = user?.imageUrl || null;
             updateAccountButton();
-            if (!userId && profileMounted) {
-              profileDialog.close();
-              clerk.unmountUserProfile(profileMount);
-              profileMounted = false;
-            }
+            if (!userId) clerk.closeUserProfile();
             if (observedUser === undefined) {
               observedUser = userId;
               const cachedOwner = localStorage.getItem("my-book-library:cloud-owner");
@@ -3320,7 +3293,9 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
           accountAvatarImage.hidden = true;
           accountAvatarFallback.hidden = false;
         }
-        accountButton.title = accountButtonLabel.textContent;
+        accountButton.title = signedIn
+          ? "Signed in to My Reading List"
+          : `${accountButtonLabel.textContent}: ${accountButtonStatus.textContent}`;
         accountButton.classList.toggle("is-connected", connected);
         mobileAccountButton.classList.toggle("is-connected", connected);
         mobileAccountButton.textContent = connected ? "Account" : "Sign in";

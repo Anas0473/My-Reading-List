@@ -33,6 +33,7 @@ test('signed-in account shows its name and profile picture', () => {
   context.updateAccountButton();
   assert.equal(context.accountButtonLabel.textContent, 'Alice');
   assert.equal(context.accountButtonStatus.textContent, 'Manage account');
+  assert.equal(context.accountButton.title, 'Signed in to My Reading List');
   assert.equal(context.accountDialog.dataset.openLibraryOnly, 'false');
   assert.equal(context.accountAvatarImage.src, 'https://example.com/alice.jpg');
   assert.equal(context.accountAvatarImage.hidden, false);

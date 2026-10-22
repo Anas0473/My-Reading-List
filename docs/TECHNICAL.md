@@ -24,6 +24,10 @@ unboxed account summary and sync notes rather than a nested card.
 
 Account and sync controls sit at the bottom of the desktop sidebar. Signed-in
 users see their profile picture when available, with a generic avatar otherwise.
+For website accounts, the green dot indicates an active My Reading List sign-in,
+not Google OAuth connection health. The account tooltip makes this distinction.
+Manage account uses Clerk's own profile modal, without a native modal dialog
+wrapper that would make Clerk's portaled verification prompts inert.
 Open Library-only users see the compact label "Open Library" with "Connected"
 underneath, changing to "Syncing…" while a sync is pending or running.
 On phones, account controls remain in the bottom navigation. The site uses its

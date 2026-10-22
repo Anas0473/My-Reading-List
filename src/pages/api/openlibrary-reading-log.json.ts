@@ -68,8 +68,13 @@ export const GET: APIRoute = async ({ url, cookies }) => {
         }, (response) => response.json());
 
         if (!response.ok) {
+          if ([401, 403, 404].includes(response.status)) {
+            return jsonResponse({
+              error: `Could not find a public reading log for "${username}". Check the username and make sure the reading log is public. No books were imported.`,
+            }, response.status);
+          }
           return jsonResponse(
-            { error: 'Open Library could not read this log. Check the username and make sure its reading log is public.' },
+            { error: 'Open Library could not load this reading log. Please try again later. No books were imported.' },
             502,
           );
         }

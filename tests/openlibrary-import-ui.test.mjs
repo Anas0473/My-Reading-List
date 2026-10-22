@@ -17,7 +17,7 @@ function setup() {
     AbortSignal,
     importForm: { addEventListener: (_, handler) => { submit = handler; } },
     websiteOwner: 'clerk:A', websiteUserId: 'A', websiteAccountGeneration: 1,
-    importUsername: { value: 'reader' }, importSubmit: {}, importMessage: {},
+    importUsername: { value: 'reader' }, importSubmit: {}, importMessage: { dataset: {} },
     importDialog: { open: true, close() { this.open = false; } },
     localBooks: [{ title: 'Existing', status: 'Read' }],
     fetch: (url, options) => {
@@ -34,8 +34,8 @@ function setup() {
   return {
     context,
     start: () => submit({ preventDefault() {} }),
-    finish: (data = { username: 'reader', books: [{ title: 'Imported', status: 'Read' }], incompleteShelves: [] }) =>
-      complete({ ok: true, json: async () => data }),
+    finish: (data = { username: 'reader', books: [{ title: 'Imported', status: 'Read' }], incompleteShelves: [] }, ok = true) =>
+      complete({ ok, json: async () => data }),
   };
 }
 
@@ -53,6 +53,7 @@ test('one-time import makes only a credential-free public read and updates the w
   assert.match(context.importMessage.textContent, /Imported 1 new book/);
   assert.equal(context.importSubmit.disabled, false);
   assert.equal(context.importDialog.open, false);
+  assert.equal(context.importMessage.dataset.state, 'success');
 });
 
 test('switching website accounts while importing prevents applying the old response', async () => {
@@ -76,6 +77,7 @@ test('signed-out visitors cannot import into a website account', async () => {
   assert.equal(context.request, undefined);
   assert.equal(context.saved, false);
   assert.match(context.importMessage.textContent, /Sign in/);
+  assert.equal(context.importMessage.dataset.state, 'error');
 });
 
 test('incomplete import explicitly reports partial results', async () => {
@@ -85,4 +87,22 @@ test('incomplete import explicitly reports partial results', async () => {
   await pending;
   assert.match(context.importMessage.textContent, /Some shelves were incomplete/);
   assert.equal(context.importDialog.open, true);
+  assert.equal(context.importMessage.dataset.state, 'warning');
+});
+
+test('failed imports show prominent errors, keep existing books and reset styling on retry', async () => {
+  const { context, start, finish } = setup();
+  const pending = start();
+  finish({ error: 'Could not find a public reading log for "reader". No books were imported.' }, false);
+  await pending;
+  assert.equal(context.importMessage.dataset.state, 'error');
+  assert.match(context.importMessage.textContent, /Could not find a public reading log/);
+  assert.equal(context.importDialog.open, true);
+  assert.equal(context.saved, false);
+  assert.equal(context.localBooks.length, 1);
+  const retry = start();
+  assert.equal(context.importMessage.dataset.state, 'pending');
+  finish();
+  await retry;
+  assert.equal(context.importMessage.dataset.state, 'success');
 });

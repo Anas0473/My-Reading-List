@@ -156,6 +156,10 @@ and repeated imports skip books already present. Imported copies are marked
 local-only for Open Library and still sync through the website account.
 Private reading logs cannot be imported this way. Successful imports close the
 dialog automatically; partial imports keep it open with a warning.
+Failed imports remain open with a red message and accent border. Missing or
+inaccessible logs identify the requested username and explain that no books were
+imported; they do not claim a private account is nonexistent. Retrying clears
+the error styling while the new request runs.
 The separate **Continue with Open Library** sign-in flow retains two-way sync;
 pre-existing Open Library connections are not disconnected by an import.
 

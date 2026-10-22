@@ -626,6 +626,13 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
       .open-library-sync-message:empty {
         display: none;
       }
+      #open-library-import-message[data-state="error"] {
+        padding: 0.75rem 0.85rem;
+        border-left: 3px solid var(--danger);
+        border-radius: 0 8px 8px 0;
+        background: color-mix(in srgb, var(--danger) 8%, transparent);
+        color: var(--danger);
+      }
       .open-library-sync-actions {
         display: flex;
         justify-content: flex-end;
@@ -3690,6 +3697,7 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
       openLibrarySyncButtonSignedIn.addEventListener("click", () => {
         accountDialog.close();
         importMessage.textContent = "";
+        importMessage.dataset.state = "";
         importDialog.showModal();
         if (canAutoFocusTextFields()) importUsername.focus();
       });
@@ -3710,6 +3718,7 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
         event.preventDefault();
         const owner = websiteOwner;
         const accountGeneration = websiteAccountGeneration;
+        importMessage.dataset.state = "error";
         if (!owner || !websiteUserId) {
           importMessage.textContent = "Sign in to your website account before importing.";
           return;
@@ -3720,6 +3729,7 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
           return;
         }
         importSubmit.disabled = true;
+        importMessage.dataset.state = "pending";
         importMessage.textContent = "Importing your public reading lists...";
         try {
           const response = await fetch(`/api/openlibrary-reading-log.json?public=1&username=${encodeURIComponent(username)}`, {
@@ -3740,11 +3750,14 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
           if (imported.added) refreshLibraryView();
           importMessage.textContent = `Imported ${imported.added} new ${imported.added === 1 ? "book" : "books"} into your website account. This import does not connect Open Library.`;
           if (data.incompleteShelves.length || data.truncated) {
+            importMessage.dataset.state = "warning";
             importMessage.textContent += " Some shelves were incomplete. You can import again later; existing books will be kept.";
           } else {
+            importMessage.dataset.state = "success";
             importDialog.close();
           }
         } catch (error) {
+          importMessage.dataset.state = "error";
           importMessage.textContent = error instanceof Error
             ? error.name === "TimeoutError" ? "Open Library took too long. No books were imported. Please try again." : error.message
             : "Could not import Open Library lists. Your saved books were kept.";

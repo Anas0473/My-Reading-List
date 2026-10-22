@@ -422,6 +422,26 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
       .open-library-sync-benefits li + li {
         margin-top: 0.25rem;
       }
+      .import-details {
+        color: var(--text-dark-muted);
+        font-size: 0.82rem;
+        line-height: 1.6;
+      }
+      .import-details summary {
+        width: fit-content;
+        padding: 0.25rem 0;
+        cursor: pointer;
+      }
+      .import-details summary:hover { color: var(--text-dark); }
+      .import-details summary:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 4px;
+      }
+      .import-details ul {
+        margin: 0.6rem 0 0;
+        padding-left: 1.15rem;
+      }
+      .import-details li + li { margin-top: 0.4rem; }
       .open-library-sync-form .open-library-account-note {
         padding: 0.75rem 0.85rem;
         border-left: 2px solid var(--border-dark);
@@ -1891,14 +1911,21 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
       </div>
       <form class="open-library-sync-form" id="open-library-import-form">
         <h2 id="open-library-import-title">Import lists from Open Library</h2>
-        <p>Copy your public Open Library reading lists into your current My Reading List account.</p>
-        <p class="open-library-account-note"><strong>One-time import, not a login or full sync.</strong> Your accounts stay separate. Nothing is sent to Open Library, and future changes there won't update your lists here.</p>
-        <p>Your existing books and reading statuses stay unchanged. Importing does not remove books you deleted on Open Library, so your totals may differ. Editions already here won't be added again.</p>
+        <p>Copy your public reading lists into this account. One-time copy, not ongoing sync.</p>
         <div class="open-library-field">
           <label for="open-library-import-username">Open Library username</label>
-          <input id="open-library-import-username" type="text" required pattern="[\w.\-]{1,64}" maxlength="64" autocomplete="off" spellcheck="false" placeholder="Your Open Library username" />
+          <input id="open-library-import-username" type="text" required pattern="[\w.\-]{1,64}" maxlength="64" autocomplete="off" spellcheck="false" placeholder="Your Open Library username" aria-describedby="open-library-import-help" />
         </div>
-        <p class="open-library-note">Use the username from openlibrary.org/people/your-username, not your Google email. Your reading log must be public. No password or Internet Archive keys are needed.</p>
+        <p class="open-library-note" id="open-library-import-help">Use your Open Library username, not your email. Your reading log must be public.</p>
+        <details class="import-details">
+          <summary>How importing works</summary>
+          <ul>
+            <li>Your accounts stay separate. No password or Internet Archive keys are needed, and nothing is sent to Open Library.</li>
+            <li>Existing books and reading statuses stay unchanged. Editions already here are skipped.</li>
+            <li>Later changes or deletions on Open Library aren't copied here, so your totals may differ.</li>
+            <li>Find your username in openlibrary.org/people/your-username.</li>
+          </ul>
+        </details>
         <p class="open-library-sync-message" id="open-library-import-message" role="status" aria-live="polite"></p>
         <div class="open-library-sync-actions">
           <button type="button" id="open-library-import-cancel">Cancel</button>

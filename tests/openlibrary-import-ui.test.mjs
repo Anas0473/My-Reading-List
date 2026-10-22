@@ -5,6 +5,14 @@ import vm from 'node:vm';
 import ts from 'typescript';
 
 const page = readFileSync(new URL('../src/pages/index.astro', import.meta.url), 'utf8');
+test('import guidance is concise with optional details collapsed by default', () => {
+  const dialog = page.slice(page.indexOf('<dialog id="open-library-import-dialog"'), page.indexOf('    <script>', page.indexOf('<dialog id="open-library-import-dialog"')));
+  assert.match(dialog, /One-time copy, not ongoing sync/);
+  assert.match(dialog, /aria-describedby="open-library-import-help"/);
+  assert.match(dialog, /<details class="import-details">\s*<summary>How importing works<\/summary>/);
+  assert.match(dialog, /Later changes or deletions on Open Library aren't copied here/);
+  assert.doesNotMatch(dialog, /<details[^>]*\bopen\b|class="open-library-account-note"/);
+});
 const start = page.indexOf('      importForm.addEventListener("submit"');
 const end = page.indexOf('      openLibraryBackButton.addEventListener', start);
 assert.ok(start >= 0 && end > start);

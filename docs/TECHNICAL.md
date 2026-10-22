@@ -154,7 +154,7 @@ required. This does not sign in to Open Library, link accounts, enable ongoing
 sync, or send shelf changes back. Existing books and statuses are preserved,
 including website copies of books subsequently removed from Open Library.
 Importing is additive, not a mirror; shelf totals can therefore differ.
-and repeated imports skip books already present. Imported copies are marked
+Repeated imports skip books already present. Imported copies are marked
 local-only for Open Library and still sync through the website account.
 Reading-log publication years and edition dates are normalized to text to match
 cloud validation, including books without a logged edition or edition date.
@@ -170,6 +170,9 @@ imported; they do not claim a private account is nonexistent. Retrying clears
 the error styling while the new request runs.
 The separate **Continue with Open Library** sign-in flow retains two-way sync;
 pre-existing Open Library connections are not disconnected by an import.
+The dialog keeps a brief one-time-copy summary and public-username guidance
+visible; account separation and preservation details are collapsed under
+"How importing works" to keep the form compact.
 
 Create a Clerk application and enable Google, passwords, and email verification
 codes in its authentication settings. In the Password tab, turn on

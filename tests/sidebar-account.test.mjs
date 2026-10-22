@@ -57,7 +57,8 @@ test('accounts without a photo and Open Library-only accounts use the fallback',
   context.websiteUserId = null;
   context.getOpenLibraryPushUser = () => 'reader';
   context.updateAccountButton();
-  assert.equal(context.accountButtonLabel.textContent, 'Open Library connected');
+  assert.equal(context.accountButtonLabel.textContent, 'Open Library');
+  assert.equal(context.accountButtonStatus.textContent, 'Connected');
   assert.equal(context.accountDialog.dataset.openLibraryOnly, 'true');
   assert.equal(context.accountAvatarImage.hidden, true);
 });
@@ -68,14 +69,17 @@ test('Open Library-only accounts say they are syncing until the sync finishes', 
   context.getOpenLibraryPushUser = () => 'reader';
   context.openLibraryStartupSyncPending = true;
   context.updateAccountButton();
-  assert.equal(context.accountButtonLabel.textContent, 'Syncing Open Library…');
+  assert.equal(context.accountButtonLabel.textContent, 'Open Library');
+  assert.equal(context.accountButtonStatus.textContent, 'Syncing…');
   context.openLibraryStartupSyncPending = false;
   context.openLibrarySyncRunning = true;
   context.updateAccountButton();
-  assert.equal(context.accountButtonLabel.textContent, 'Syncing Open Library…');
+  assert.equal(context.accountButtonLabel.textContent, 'Open Library');
+  assert.equal(context.accountButtonStatus.textContent, 'Syncing…');
   context.openLibrarySyncRunning = false;
   context.updateAccountButton();
-  assert.equal(context.accountButtonLabel.textContent, 'Open Library connected');
+  assert.equal(context.accountButtonLabel.textContent, 'Open Library');
+  assert.equal(context.accountButtonStatus.textContent, 'Connected');
 });
 
 test('website accounts say they are syncing until their library sync finishes', () => {

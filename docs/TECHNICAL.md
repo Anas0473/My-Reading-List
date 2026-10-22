@@ -23,6 +23,8 @@ unboxed account summary and sync notes rather than a nested card.
 
 Account and sync controls sit at the bottom of the desktop sidebar. Signed-in
 users see their profile picture when available, with a generic avatar otherwise.
+Open Library-only users see the compact label "Open Library" with "Connected"
+underneath, changing to "Syncing…" while a sync is pending or running.
 On phones, account controls remain in the bottom navigation. The site uses its
 default dark appearance; the background color picker has been removed.
 The "Extra edition, only on this site" badge is shown only in Open Library-only

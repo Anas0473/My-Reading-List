@@ -3302,12 +3302,11 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
         const websiteSyncing = signedIn && (openLibraryStartupSyncPending || openLibrarySyncRunning || cloudSyncRunning);
         accountButtonLabel.textContent = signedIn
           ? (websiteUserName || "Signed in")
-          : openLibrarySyncing ? "Syncing Open Library…"
-          : openLibraryOnly ? "Open Library connected" : "Sign in to sync";
+          : openLibraryOnly ? "Open Library" : "Sign in to sync";
         accountButtonStatus.textContent = signedIn
           ? websiteSyncing ? "Syncing your library…" : "Manage account"
-          : openLibrarySyncing ? "Checking for new books"
-          : openLibraryOnly ? "Your reading lists are connected" : "Sync your reading lists";
+          : openLibrarySyncing ? "Syncing…"
+          : openLibraryOnly ? "Connected" : "Sync your reading lists";
         accountButton.classList.toggle("is-syncing", openLibrarySyncing || websiteSyncing);
         const avatarUrl = signedIn ? websiteUserImage : null;
         if (avatarUrl) {

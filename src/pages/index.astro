@@ -3244,6 +3244,7 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
           openLibraryAccountMessage.textContent = `Logged in as ${data.username}.`;
           if (!websiteOwner && data.cloudConnected) await cloudLibrary?.connect(data.username);
           await syncOpenLibrary(data.username, { confirmed: true, sendLocalOnlyBooks: true });
+          closeOpenLibrarySyncAfterSuccess();
         } catch (error) {
           openLibraryAccountMessage.textContent = error instanceof Error
             ? error.message

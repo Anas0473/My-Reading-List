@@ -128,8 +128,8 @@ automatically. Sign-in and sync keep Back, Close, Cancel, Disconnect, Escape and
 backdrop dismissal disabled until completion or failure, without a timed unlock.
 Login and reading-log requests time out after three minutes and surface errors.
 Routine periodic checks stay in the background. Successful syncs update lists
-without reloading; the dialog shows "Up to date" and then closes after a brief
-delay for startup/manual syncs. Errors and incomplete-sync warnings stay visible.
+without reloading; the dialog shows "Up to date" and then closes after 1.2 seconds
+for sign-in, startup and manual syncs. Errors and incomplete-sync warnings stay visible.
 Right after logging in, and whenever you choose Sync now, books saved only in this
 browser are added to Open Library unless Open Library already has that work. The sync
 dialog shows how many books are waiting. Changes made while offline or logged out

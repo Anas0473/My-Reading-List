@@ -88,3 +88,19 @@ test('a new sync or changed message prevents a pending auto-close', async () => 
     assert.equal(state.context.openLibrarySyncDialog.open, true);
   }
 });
+
+test('sign-in waits for its sync before scheduling the same success-only auto-close', async () => {
+  const loginStart = page.indexOf('      async function logInToOpenLibrary()');
+  const loginEnd = page.indexOf('      async function logOutOfOpenLibrary()', loginStart);
+  const login = page.slice(loginStart, loginEnd);
+  assert.match(login, /await syncOpenLibrary\(data\.username, \{ confirmed: true, sendLocalOnlyBooks: true \}\);\s*closeOpenLibrarySyncAfterSuccess\(\);/);
+  for (const message of ['Up to date.', 'Could not sync Open Library.', 'Older synced books were kept.']) {
+    const state = setup(message);
+    state.context.openLibrarySyncInProgress = null;
+    state.context.openLibrarySyncMessage.textContent = message;
+    state.context.closeOpenLibrarySyncAfterSuccess();
+    assert.equal(state.timers.size, message === 'Up to date.' ? 1 : 0);
+    state.runTimers();
+    assert.equal(state.context.openLibrarySyncDialog.open, message !== 'Up to date.');
+  }
+});

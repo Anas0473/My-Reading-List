@@ -11,9 +11,15 @@ to Open Library. Moving a book to another shelf keeps its rating but hides the
 rating controls and stars until it returns to Read. Ratings do not yet affect
 recommendations.
 
-The privacy policy link appears at the bottom of the account dialog on desktop
-and mobile, whether signed in or signed out. The sidebar account card stays in
-its original bottom-corner position.
+The privacy policy is always available through a shield icon beside the
+bottom sidebar account card, or beside the site title on mobile. This direct
+link has a "Privacy policy" tooltip and accessible label and is independent of
+sign-in, including Open Library-only connections. The sidebar
+account card stays anchored at the bottom, with no extra footer below it.
+The website-account dialog also retains its privacy policy link.
+The desktop account and privacy link share a flat, borderless row with
+a subtle shared hover background. The connected Open Library dialog uses an
+unboxed account summary and sync notes rather than a nested card.
 
 Account and sync controls sit at the bottom of the desktop sidebar. Signed-in
 users see their profile picture when available, with a generic avatar otherwise.

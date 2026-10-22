@@ -1,0 +1,31 @@
+<a class="privacy-link" href="/privacy" aria-label="Privacy policy" title="Privacy policy">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <path d="M12 3 4 6v6c0 5 8 9 8 9s8-4 8-9V6l-8-3Z" />
+    <path d="m9 12 2 2 4-4" />
+  </svg>
+</a>
+
+<style>
+  .privacy-link {
+    display: grid;
+    place-items: center;
+    flex: 0 0 auto;
+    width: 2.75rem;
+    height: 2.75rem;
+    border-radius: 50%;
+    color: var(--muted);
+    text-decoration: none;
+  }
+  .privacy-link:hover {
+    background: var(--fill-strong);
+    color: var(--fg);
+  }
+  .privacy-link:focus-visible {
+    outline: 2px solid var(--page-focus);
+    outline-offset: 2px;
+  }
+  svg { width: 1.1rem; height: 1.1rem; }
+  @media (max-width: 700px) {
+    .privacy-link { position: absolute; top: .65rem; right: .75rem; }
+  }
+</style>

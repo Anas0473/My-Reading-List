@@ -18,6 +18,7 @@ function setup() {
   const context = vm.createContext({
     websiteUserId: 'user-A', websiteUserName: 'Alice', websiteUserImage: 'https://example.com/alice.jpg',
     websiteOwner: 'clerk:user-A', cloudReauthenticationRequired: false,
+    websiteGoogleReconnectRequired: false,
     openLibraryStartupSyncPending: false, openLibrarySyncRunning: false, cloudSyncRunning: false,
     getOpenLibraryPushUser: () => null,
     accountButton: element(), mobileAccountButton: element(), accountDialog: element(),
@@ -99,4 +100,38 @@ test('website accounts hide Open Library-only badges even with a legacy connecti
   context.getOpenLibraryPushUser = () => 'reader';
   context.updateAccountButton();
   assert.equal(context.accountDialog.dataset.openLibraryOnly, 'false');
+});
+
+test('Google reconnect warning appears without treating the website session as signed out', () => {
+  const context = setup();
+  context.websiteGoogleReconnectRequired = true;
+  context.cloudSyncRunning = true;
+  const states = {};
+  context.accountButton.classList.toggle = (name, enabled) => { states[name] = enabled; };
+  context.updateAccountButton();
+  assert.equal(context.accountButtonLabel.textContent, 'Alice');
+  assert.equal(context.accountButtonStatus.textContent, 'Reconnect Google');
+  assert.equal(context.mobileAccountButton.textContent, 'Reconnect');
+  assert.equal(context.accountDialog.dataset.signedIn, 'true');
+  assert.equal(states['needs-google-reconnect'], true);
+  assert.equal(states['is-connected'], true);
+  assert.match(context.accountButton.title, /Google needs reconnecting/);
+  context.websiteGoogleReconnectRequired = false;
+  context.cloudSyncRunning = false;
+  context.updateAccountButton();
+  assert.equal(states['needs-google-reconnect'], false);
+  assert.equal(context.accountButtonStatus.textContent, 'Manage account');
+  assert.equal(context.mobileAccountButton.textContent, 'Account');
+});
+
+test('Google warnings do not leak into signed-out or Open Library-only accounts', () => {
+  const context = setup();
+  context.websiteGoogleReconnectRequired = true;
+  context.websiteUserId = null;
+  context.updateAccountButton();
+  assert.equal(context.accountButtonLabel.textContent, 'Sign in to sync');
+  context.getOpenLibraryPushUser = () => 'reader';
+  context.updateAccountButton();
+  assert.equal(context.accountButtonStatus.textContent, 'Connected');
+  assert.equal(context.mobileAccountButton.textContent, 'Account');
 });

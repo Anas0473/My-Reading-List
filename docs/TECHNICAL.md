@@ -26,6 +26,11 @@ Account and sync controls sit at the bottom of the desktop sidebar. Signed-in
 users see their profile picture when available, with a generic avatar otherwise.
 For website accounts, the green dot indicates an active My Reading List sign-in,
 not Google OAuth connection health. The account tooltip makes this distinction.
+If Clerk reports a Google reconnect error, the desktop avatar instead shows an
+amber exclamation badge and "Reconnect Google" status. Mobile shows "Reconnect"
+with an amber dot. These controls still open the account dialog and Manage account;
+they do not sign the user out or interrupt sync. Clerk user updates clear the
+warning after reconnection. No warning is inferred from a missing Google account.
 Manage account uses Clerk's own profile modal, without a native modal dialog
 wrapper that would make Clerk's portaled verification prompts inert.
 Open Library-only users see the compact label "Open Library" with "Connected"

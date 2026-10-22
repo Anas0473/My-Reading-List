@@ -232,6 +232,23 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
         background: var(--accent);
         animation: account-sync-pulse 1.2s ease-in-out infinite;
       }
+      .account-button.needs-google-reconnect .account-avatar::after {
+        content: "!";
+        display: grid;
+        place-items: center;
+        width: 0.85rem;
+        height: 0.85rem;
+        background: var(--accent);
+        color: var(--accent-ink);
+        font-size: 0.65rem;
+        font-weight: 600;
+        animation: none;
+      }
+      .account-button.needs-google-reconnect .account-button-status { color: var(--page-accent-text); }
+      .mobile-nav-button.needs-google-reconnect::before {
+        background: var(--accent);
+        box-shadow: none;
+      }
       @keyframes account-sync-pulse {
         50% { opacity: 0.35; }
       }
@@ -1871,6 +1888,7 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
       import { createCloudLibraryClient } from "../lib/cloud-library-client";
       import { cachedCoverUrl } from "../lib/cover-url";
       import { keepTypingFocus } from "../lib/keep-typing-focus";
+      import { googleReconnectRequired } from "../lib/google-connection";
       import { $clerkStore } from "@clerk/astro/client";
       import { createSyncBookIndex } from "../lib/sync-book-index";
       import {
@@ -1905,6 +1923,7 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
       const openLibrarySyncButtonSignedIn = document.getElementById("open-library-sync-button-signed-in") as HTMLButtonElement;
       let websiteUserName: string | null = null;
       let websiteUserImage: string | null = null;
+      let websiteGoogleReconnectRequired = false;
       const accountAvatarImage = document.getElementById("account-avatar-image") as HTMLImageElement;
       const accountAvatarFallback = document.getElementById("account-avatar-fallback") as HTMLElement;
       const accountButtonStatus = document.getElementById("account-button-status") as HTMLElement;
@@ -2916,6 +2935,7 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
             websiteUserId = userId;
             websiteUserName = user?.firstName || user?.username || null;
             websiteUserImage = user?.imageUrl || null;
+            websiteGoogleReconnectRequired = googleReconnectRequired(user?.externalAccounts);
             updateAccountButton();
             if (!userId) clerk.closeUserProfile();
             if (observedUser === undefined) {
@@ -3273,14 +3293,17 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
         const connected = signedIn || openLibraryOnly;
         const openLibrarySyncing = openLibraryOnly && (openLibraryStartupSyncPending || openLibrarySyncRunning);
         const websiteSyncing = signedIn && (openLibraryStartupSyncPending || openLibrarySyncRunning || cloudSyncRunning);
+        const needsGoogleReconnect = signedIn && websiteGoogleReconnectRequired;
         accountButtonLabel.textContent = signedIn
           ? (websiteUserName || "Signed in")
           : openLibraryOnly ? "Open Library" : "Sign in to sync";
         accountButtonStatus.textContent = signedIn
-          ? websiteSyncing ? "Syncing your library…" : "Manage account"
+          ? needsGoogleReconnect ? "Reconnect Google" : websiteSyncing ? "Syncing your library…" : "Manage account"
           : openLibrarySyncing ? "Syncing…"
           : openLibraryOnly ? "Connected" : "Sync your reading lists";
         accountButton.classList.toggle("is-syncing", openLibrarySyncing || websiteSyncing);
+        accountButton.classList.toggle("needs-google-reconnect", needsGoogleReconnect);
+        mobileAccountButton.classList.toggle("needs-google-reconnect", needsGoogleReconnect);
         const avatarUrl = signedIn ? websiteUserImage : null;
         if (avatarUrl) {
           if (accountAvatarImage.getAttribute("src") !== avatarUrl) {
@@ -3294,11 +3317,12 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
           accountAvatarFallback.hidden = false;
         }
         accountButton.title = signedIn
-          ? "Signed in to My Reading List"
+          ? needsGoogleReconnect ? "Signed in to My Reading List. Google needs reconnecting in Manage account." : "Signed in to My Reading List"
           : `${accountButtonLabel.textContent}: ${accountButtonStatus.textContent}`;
         accountButton.classList.toggle("is-connected", connected);
         mobileAccountButton.classList.toggle("is-connected", connected);
-        mobileAccountButton.textContent = connected ? "Account" : "Sign in";
+        mobileAccountButton.textContent = needsGoogleReconnect ? "Reconnect" : connected ? "Account" : "Sign in";
+        mobileAccountButton.title = accountButton.title;
         accountDialog.dataset.signedIn = String(signedIn);
         accountDialog.dataset.openLibraryOnly = String(openLibraryOnly);
         accountSummary.textContent = websiteUserName ? `Signed in as ${websiteUserName}` : "Signed in";

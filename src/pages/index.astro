@@ -2509,8 +2509,6 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
       let openLibrarySyncRunning = false;
       let cloudSyncRunning = false;
       // While Open Library syncs, its box can't be closed, but never for longer than this.
-      const openLibrarySyncLockMs = 60000;
-      let openLibrarySyncLockTimer = 0;
       let openLibrarySyncLocked = false;
 
       function refreshLibraryView() {
@@ -3203,12 +3201,14 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
           return;
         }
         openLibrarySyncSubmit.disabled = true;
+        setOpenLibrarySyncLocked(true);
         openLibraryAccountMessage.textContent = "Logging in to Open Library…";
         try {
           const response = await fetch("/api/openlibrary-account.json", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(credentials),
+            signal: AbortSignal.timeout(180000),
           });
           const data = await response.json().catch(() => ({}));
           if (!response.ok || !data.username) throw new Error(data.error || "Could not log in to Open Library.");
@@ -3250,6 +3250,7 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
             : "Could not log in to Open Library.";
         } finally {
           openLibrarySyncSubmit.disabled = false;
+          if (!openLibrarySyncInProgress) setOpenLibrarySyncLocked(false);
         }
       }
 
@@ -3453,6 +3454,11 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
       } | null = null;
 
       function syncOpenLibrary(username: string, options: OpenLibrarySyncOptions = {}): Promise<void> {
+        if (!options.quiet) {
+          accountDialog.close();
+          if (!openLibrarySyncDialog.open) openLibrarySyncDialog.showModal();
+          showOpenLibraryCheckingMessage();
+        }
         const running = openLibrarySyncInProgress;
         if (running) {
           if (running.username !== username) {
@@ -3522,6 +3528,7 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
           if (!state.quiet) showOpenLibraryStatus("Checking for updates from Open Library.");
           const response = await fetch(
             `/api/openlibrary-reading-log.json?username=${encodeURIComponent(username)}`,
+            { signal: AbortSignal.timeout(180000) },
           );
           const data = await response.json();
           if (!response.ok) throw new Error(data.error || "Could not sync Open Library.");
@@ -3642,7 +3649,11 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
           openLibrarySyncMessage.textContent = syncWarnings ? syncResult : "Up to date.";
           showOpenLibraryStatus(syncWarnings ? syncResult : "");
         } catch (error) {
-          const message = error instanceof Error ? error.message : "Could not sync Open Library.";
+          const message = error instanceof Error
+            ? error.name === "TimeoutError"
+              ? "Open Library took too long. Your saved books were kept. Please try again."
+              : error.message
+            : "Could not sync Open Library.";
           openLibrarySyncMessage.textContent = message;
           if (!state.quiet) showOpenLibraryStatus(message);
         } finally {
@@ -3842,20 +3853,13 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
       });
       openLibraryLogoutButton.addEventListener("click", logOutOfOpenLibrary);
       function setOpenLibrarySyncLocked(locked: boolean) {
-        window.clearTimeout(openLibrarySyncLockTimer);
         openLibrarySyncLocked = locked;
         openLibrarySyncCancel.disabled = locked;
+        openLibraryLogoutButton.disabled = locked;
+        openLibrarySyncForm.setAttribute("aria-busy", String(locked));
         for (const id of ["open-library-sync-close", "open-library-sync-back"]) {
           const button = document.getElementById(id) as HTMLButtonElement | null;
           if (button) button.disabled = locked;
-        }
-        if (locked) {
-          openLibrarySyncLockTimer = window.setTimeout(() => {
-            setOpenLibrarySyncLocked(false);
-            if (openLibrarySyncDialog.open && openLibrarySyncInProgress) {
-              openLibrarySyncMessage.textContent = "Open Library is slow. The sync continues in the background, so you can close this box.";
-            }
-          }, openLibrarySyncLockMs);
         }
       }
 
@@ -3922,11 +3926,10 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
           await flushOpenLibraryChanges();
           const startupUser = cloudReauthenticationRequired ? null : getOpenLibraryPushUser();
           if (startupUser && openLibrarySyncDue()) {
-            const startupSync = syncOpenLibrary(startupUser, { quiet: true });
+            const startupSync = syncOpenLibrary(startupUser, {
+              quiet: accountDialog.dataset.openLibraryOnly !== "true",
+            });
             openLibrarySyncSubmit.disabled = true;
-            // Show the box so the sync can be followed.
-            const startupBoxOpened = accountDialog.dataset.openLibraryOnly === "true" && !document.querySelector("dialog[open]");
-            if (startupBoxOpened) openOpenLibrarySyncDialog();
             await startupSync;
             // Close it whether the site or you opened it during the sync.
             closeOpenLibrarySyncAfterSuccess();

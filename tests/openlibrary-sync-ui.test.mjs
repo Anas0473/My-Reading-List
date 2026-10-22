@@ -15,9 +15,12 @@ function setup(books, responseBooks = books, incompleteShelves = []) {
   let finishRequest;
   const context = vm.createContext({
     localBooks: structuredClone(books),
+    AbortSignal,
+    websiteAccountCheck: Promise.resolve(),
+    accountDialog: { close() {} },
     openLibrarySyncMessage: { textContent: '' },
     openLibrarySyncSubmit: { disabled: false },
-    openLibrarySyncDialog: { open: true, close() { throw new Error('Unexpected dialog close'); } },
+    openLibrarySyncDialog: { open: true, showModal() { this.open = true; }, close() { throw new Error('Unexpected dialog close'); } },
     window: {
       confirm: () => true,
       location: { reload() { throw new Error('Unexpected reload'); } },

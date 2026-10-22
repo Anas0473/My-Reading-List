@@ -262,6 +262,23 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
         overflow: hidden;
         text-overflow: ellipsis;
       }
+      #google-reconnect-status {
+        position: fixed;
+        bottom: 6rem;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 20;
+        box-sizing: border-box;
+        width: min(28rem, calc(100vw - 2rem));
+        margin: 0;
+        padding: 0.85rem 1rem;
+        border: 1px solid var(--border-dark);
+        border-radius: 12px;
+        background: var(--surface-dark);
+        color: var(--text-dark);
+        font-size: 0.85rem;
+      }
+      #google-reconnect-status[hidden] { display: none; }
       :global(.shelf-undo-stack) {
         position: fixed;
         bottom: 1rem;
@@ -1776,6 +1793,7 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
     </nav>
 
     <WebsiteAccount />
+    <p id="google-reconnect-status" role="status" aria-live="polite" hidden></p>
 
     <!-- Avoids "back to top" class/label text that ad blockers (e.g. Brave Shields) hide. -->
     <button type="button" class="shelf-jump-button" aria-label="Jump to start of list" title="Jump to start of list" hidden>↑</button>
@@ -1889,6 +1907,7 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
       import { cachedCoverUrl } from "../lib/cover-url";
       import { keepTypingFocus } from "../lib/keep-typing-focus";
       import { googleReconnectRequired } from "../lib/google-connection";
+      import { reconnectGoogle } from "../lib/reconnect-google";
       import { $clerkStore } from "@clerk/astro/client";
       import { createSyncBookIndex } from "../lib/sync-book-index";
       import {
@@ -1924,6 +1943,11 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
       let websiteUserName: string | null = null;
       let websiteUserImage: string | null = null;
       let websiteGoogleReconnectRequired = false;
+      let googleReconnectRunning = false;
+      const googleReconnectStatus = document.getElementById("google-reconnect-status") as HTMLParagraphElement;
+      window.addEventListener("pageshow", () => {
+        if (!googleReconnectRunning) googleReconnectStatus.hidden = true;
+      });
       const accountAvatarImage = document.getElementById("account-avatar-image") as HTMLImageElement;
       const accountAvatarFallback = document.getElementById("account-avatar-fallback") as HTMLElement;
       const accountButtonStatus = document.getElementById("account-button-status") as HTMLElement;
@@ -3298,7 +3322,7 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
           ? (websiteUserName || "Signed in")
           : openLibraryOnly ? "Open Library" : "Sign in to sync";
         accountButtonStatus.textContent = signedIn
-          ? needsGoogleReconnect ? "Reconnect Google" : websiteSyncing ? "Syncing your library…" : "Manage account"
+          ? needsGoogleReconnect ? googleReconnectRunning ? "Reconnecting…" : "Reconnect Google" : websiteSyncing ? "Syncing your library…" : "Manage account"
           : openLibrarySyncing ? "Syncing…"
           : openLibraryOnly ? "Connected" : "Sync your reading lists";
         accountButton.classList.toggle("is-syncing", openLibrarySyncing || websiteSyncing);
@@ -3317,11 +3341,11 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
           accountAvatarFallback.hidden = false;
         }
         accountButton.title = signedIn
-          ? needsGoogleReconnect ? "Signed in to My Reading List. Google needs reconnecting in Manage account." : "Signed in to My Reading List"
+          ? needsGoogleReconnect ? "Reconnect your Google account. You are still signed in to My Reading List." : "Signed in to My Reading List"
           : `${accountButtonLabel.textContent}: ${accountButtonStatus.textContent}`;
         accountButton.classList.toggle("is-connected", connected);
         mobileAccountButton.classList.toggle("is-connected", connected);
-        mobileAccountButton.textContent = needsGoogleReconnect ? "Reconnect" : connected ? "Account" : "Sign in";
+        mobileAccountButton.textContent = needsGoogleReconnect ? googleReconnectRunning ? "Connecting…" : "Reconnect" : connected ? "Account" : "Sign in";
         mobileAccountButton.title = accountButton.title;
         accountDialog.dataset.signedIn = String(signedIn);
         accountDialog.dataset.openLibraryOnly = String(openLibraryOnly);
@@ -3333,6 +3357,34 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
       const startupAccountCheck = new Promise<void>((resolve) => { resolveStartupAccountCheck = resolve; });
       let startupAccountCheckDone = false;
       let accountDialogPending = false;
+      async function startGoogleReconnect() {
+        if (googleReconnectRunning) return;
+        googleReconnectRunning = true;
+        accountDialog.close();
+        googleReconnectStatus.textContent = "Connecting to Google…";
+        googleReconnectStatus.hidden = false;
+        accountButton.setAttribute("aria-busy", "true");
+        mobileAccountButton.setAttribute("aria-busy", "true");
+        updateAccountButton();
+        try {
+          const clerk = $clerkStore.get();
+          if (!clerk?.loaded) throw new Error("Account controls are still loading. Please try again shortly.");
+          const url = await reconnectGoogle(clerk, location.href, () => {
+            googleReconnectStatus.textContent = "Verify your identity in the verification prompt to reconnect Google.";
+          });
+          googleReconnectStatus.textContent = "Opening Google…";
+          location.assign(url.href);
+        } catch (error) {
+          cloudLibraryStatus.textContent = error instanceof Error ? error.message : "Could not reconnect Google. Please try again.";
+          googleReconnectStatus.hidden = true;
+          accountDialog.showModal();
+        } finally {
+          googleReconnectRunning = false;
+          accountButton.removeAttribute("aria-busy");
+          mobileAccountButton.removeAttribute("aria-busy");
+          updateAccountButton();
+        }
+      }
       async function openAccountDialog() {
         if (!startupAccountCheckDone) {
           if (accountDialogPending) return;
@@ -3343,6 +3395,10 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
           accountDialogPending = false;
           accountButton.removeAttribute("aria-busy");
           mobileAccountButton.removeAttribute("aria-busy");
+        }
+        if (websiteUserId && websiteGoogleReconnectRequired) {
+          await startGoogleReconnect();
+          return;
         }
         if (accountButton.classList.contains("is-connected") && accountDialog.dataset.signedIn !== "true") {
           openOpenLibrarySyncDialog();

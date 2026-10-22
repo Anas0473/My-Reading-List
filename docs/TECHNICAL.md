@@ -28,8 +28,13 @@ For website accounts, the green dot indicates an active My Reading List sign-in,
 not Google OAuth connection health. The account tooltip makes this distinction.
 If Clerk reports a Google reconnect error, the desktop avatar instead shows an
 amber exclamation badge and "Reconnect Google" status. Mobile shows "Reconnect"
-with an amber dot. These controls still open the account dialog and Manage account;
-they do not sign the user out or interrupt sync. Clerk user updates clear the
+with an amber dot. Clicking either warning starts Google reconnection directly,
+with a visible progress message and duplicate-click protection. If Clerk requires
+identity verification, its verification modal opens and successful verification
+retries the connection request once before redirecting to Google. Cancellation
+and errors restore the account dialog with feedback. This uses Clerk's typed
+internal verification-modal API because Astro has no `useReverification` hook.
+It does not sign the user out or interrupt sync. Clerk user updates clear the
 warning after reconnection. No warning is inferred from a missing Google account.
 Manage account uses Clerk's own profile modal, without a native modal dialog
 wrapper that would make Clerk's portaled verification prompts inert.

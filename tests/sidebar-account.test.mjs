@@ -19,6 +19,7 @@ function setup() {
     websiteUserId: 'user-A', websiteUserName: 'Alice', websiteUserImage: 'https://example.com/alice.jpg',
     websiteOwner: 'clerk:user-A', cloudReauthenticationRequired: false,
     websiteGoogleReconnectRequired: false,
+    googleReconnectRunning: false,
     openLibraryStartupSyncPending: false, openLibrarySyncRunning: false, cloudSyncRunning: false,
     getOpenLibraryPushUser: () => null,
     accountButton: element(), mobileAccountButton: element(), accountDialog: element(),
@@ -115,7 +116,7 @@ test('Google reconnect warning appears without treating the website session as s
   assert.equal(context.accountDialog.dataset.signedIn, 'true');
   assert.equal(states['needs-google-reconnect'], true);
   assert.equal(states['is-connected'], true);
-  assert.match(context.accountButton.title, /Google needs reconnecting/);
+  assert.match(context.accountButton.title, /Reconnect your Google account/);
   context.websiteGoogleReconnectRequired = false;
   context.cloudSyncRunning = false;
   context.updateAccountButton();

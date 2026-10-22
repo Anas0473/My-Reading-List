@@ -120,7 +120,7 @@ export const GET: APIRoute = async ({ url, cookies }) => {
             author: Array.isArray(work.author_names)
               ? work.author_names.join(', ')
               : 'Unknown Author',
-            pubDate: work.first_publish_year || 'Unknown',
+            pubDate: String(work.first_publish_year || 'Unknown'),
             isbn: null,
             heroImage: work.cover_id
               ? `https://covers.openlibrary.org/b/id/${work.cover_id}-M.jpg`
@@ -175,9 +175,9 @@ export const GET: APIRoute = async ({ url, cookies }) => {
 
         book.title = edition.title || book.title;
         book.subtitle = edition.subtitle || null;
-        book.pubDate = Array.isArray(edition.publish_date)
+        book.pubDate = String(Array.isArray(edition.publish_date)
           ? edition.publish_date[0] || book.pubDate
-          : edition.publish_date || book.pubDate;
+          : edition.publish_date || book.pubDate);
         book.editionLanguage = edition.languages?.[0]?.key?.split('/').pop() || null;
         book.isbn = edition.isbn_13?.[0] || edition.isbn_10?.[0] || null;
         book.publisher = edition.publishers?.[0] || null;
@@ -215,7 +215,9 @@ export const GET: APIRoute = async ({ url, cookies }) => {
       book.editionHeroImage = `https://covers.openlibrary.org/b/id/${coverId}-M.jpg`;
       book.title = edition.title || book.title;
       book.subtitle = edition.subtitle || null;
-      book.pubDate = edition.publish_date || book.pubDate;
+      book.pubDate = String(Array.isArray(edition.publish_date)
+        ? edition.publish_date[0] || book.pubDate
+        : edition.publish_date || book.pubDate);
       book.isbn = edition.isbn_13?.[0] || edition.isbn_10?.[0] || null;
       book.publisher = edition.publishers?.[0] || null;
       const editionLanguage = edition.languages?.[0]?.key?.split('/').pop();

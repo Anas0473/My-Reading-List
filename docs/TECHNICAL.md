@@ -154,6 +154,8 @@ required. This does not sign in to Open Library, link accounts, enable ongoing
 sync, or send shelf changes back. Existing books and statuses are preserved,
 and repeated imports skip books already present. Imported copies are marked
 local-only for Open Library and still sync through the website account.
+Reading-log publication years and edition dates are normalized to text to match
+cloud validation, including books without a logged edition or edition date.
 Private reading logs cannot be imported this way. Successful imports close the
 dialog automatically; partial imports keep it open with a warning.
 Failed imports remain open with a red message and accent border. Missing or

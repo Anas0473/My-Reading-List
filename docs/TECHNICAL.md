@@ -152,12 +152,18 @@ one-time import dialog. Enter an Open Library username to copy its public readin
 log into the current website account; no password or Internet Archive keys are
 required. This does not sign in to Open Library, link accounts, enable ongoing
 sync, or send shelf changes back. Existing books and statuses are preserved,
+including website copies of books subsequently removed from Open Library.
+Importing is additive, not a mirror; shelf totals can therefore differ.
 and repeated imports skip books already present. Imported copies are marked
 local-only for Open Library and still sync through the website account.
 Reading-log publication years and edition dates are normalized to text to match
 cloud validation, including books without a logged edition or edition date.
 Private reading logs cannot be imported this way. Successful imports close the
 dialog automatically; partial imports keep it open with a warning.
+While importing, back, close, Cancel, Escape and backdrop dismissal are blocked.
+The username and submit button are disabled, repeated submissions are ignored,
+and progress remains visible until completion or failure. All controls unlock
+after the request finishes, including failures and timeouts.
 Failed imports remain open with a red message and accent border. Missing or
 inaccessible logs identify the requested username and explain that no books were
 imported; they do not claim a private account is nonexistent. Retrying clears

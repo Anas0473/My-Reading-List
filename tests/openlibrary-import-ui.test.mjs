@@ -15,6 +15,11 @@ function setup() {
   let complete;
   const context = vm.createContext({
     AbortSignal,
+    importRunning: false,
+    setImportRunning(running) {
+      context.importRunning = running;
+      context.importSubmit.disabled = running;
+    },
     importForm: { addEventListener: (_, handler) => { submit = handler; } },
     websiteOwner: 'clerk:A', websiteUserId: 'A', websiteAccountGeneration: 1,
     importUsername: { value: 'reader' }, importSubmit: {}, importMessage: { dataset: {} },
@@ -105,4 +110,80 @@ test('failed imports show prominent errors, keep existing books and reset stylin
   finish();
   await retry;
   assert.equal(context.importMessage.dataset.state, 'success');
+});
+
+test('imports are locked while pending and duplicate submits do not start another request', async () => {
+  const { context, start, finish } = setup();
+  const pending = start();
+  assert.equal(context.importRunning, true);
+  assert.equal(context.importSubmit.disabled, true);
+  const request = context.request;
+  await start();
+  assert.equal(context.request, request);
+  finish();
+  await pending;
+  assert.equal(context.importRunning, false);
+  assert.equal(context.importSubmit.disabled, false);
+});
+
+const controlsStart = page.indexOf('      const importDialog =');
+const controlsEnd = page.indexOf('      importForm.addEventListener("submit"', controlsStart);
+const controlsSource = ts.transpile(page.slice(controlsStart, controlsEnd), { target: ts.ScriptTarget.ES2022 });
+
+function setupControls() {
+  const elements = new Map();
+  function element(id) {
+    if (!elements.has(id)) elements.set(id, {
+      disabled: false, dataset: {}, listeners: {}, attributes: {}, open: true,
+      addEventListener(name, callback) { this.listeners[name] = callback; },
+      setAttribute(name, value) { this.attributes[name] = value; },
+      close() { this.open = false; },
+      showModal() { this.open = true; },
+      getBoundingClientRect: () => ({ left: 10, right: 100, top: 10, bottom: 100 }),
+    });
+    return elements.get(id);
+  }
+  const context = vm.createContext({
+    document: { getElementById: element },
+    openLibrarySyncButtonSignedIn: element('import-trigger'),
+    accountDialog: element('account'),
+    canAutoFocusTextFields: () => false,
+  });
+  vm.runInContext(controlsSource, context);
+  return { context, element };
+}
+
+test('import lock disables all controls and blocks back, close, cancel, Escape and backdrop dismissal', () => {
+  const { context, element } = setupControls();
+  const dialog = element('open-library-import-dialog');
+  context.setImportRunning(true);
+  assert.equal(element('open-library-import-form').attributes['aria-busy'], 'true');
+  for (const id of ['back', 'close', 'cancel']) {
+    const button = element(`open-library-import-${id}`);
+    assert.equal(button.disabled, true);
+    button.listeners.click();
+    assert.equal(dialog.open, true);
+  }
+  assert.equal(element('open-library-import-username').disabled, true);
+  assert.equal(element('open-library-import-submit').disabled, true);
+  for (const name of ['keydown', 'cancel']) {
+    let prevented = false;
+    dialog.listeners[name]({ key: 'Escape', preventDefault() { prevented = true; } });
+    assert.equal(prevented, true);
+  }
+  dialog.listeners.click({ target: dialog, clientX: 0, clientY: 0 });
+  assert.equal(dialog.open, true);
+  context.setImportRunning(false);
+  assert.equal(element('open-library-import-form').attributes['aria-busy'], 'false');
+  assert.equal(element('open-library-import-username').disabled, false);
+  for (const id of ['back', 'close', 'cancel']) {
+    dialog.open = true;
+    const button = element(`open-library-import-${id}`);
+    assert.equal(button.disabled, false);
+    button.listeners.click();
+    assert.equal(dialog.open, false);
+  }
+  dialog.open = true;
+  dialog.listeners.click({ target: dialog, clientX: 0, clientY: 0 });
+  assert.equal(dialog.open, false);
 });

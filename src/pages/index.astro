@@ -1893,7 +1893,7 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
         <h2 id="open-library-import-title">Import lists from Open Library</h2>
         <p>Copy your public Open Library reading lists into your current My Reading List account.</p>
         <p class="open-library-account-note"><strong>One-time import, not a login or full sync.</strong> Your accounts stay separate. Nothing is sent to Open Library, and future changes there won't update your lists here.</p>
-        <p>Your existing books and reading statuses stay unchanged. Books already here won't be added again.</p>
+        <p>Your existing books and reading statuses stay unchanged. Importing does not remove books you deleted on Open Library, so your totals may differ. Editions already here won't be added again.</p>
         <div class="open-library-field">
           <label for="open-library-import-username">Open Library username</label>
           <input id="open-library-import-username" type="text" required pattern="[\w.\-]{1,64}" maxlength="64" autocomplete="off" spellcheck="false" placeholder="Your Open Library username" />
@@ -3694,28 +3694,52 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
       const importUsername = document.getElementById("open-library-import-username") as HTMLInputElement;
       const importMessage = document.getElementById("open-library-import-message") as HTMLElement;
       const importSubmit = document.getElementById("open-library-import-submit") as HTMLButtonElement;
+      let importRunning = false;
+      const importDismissButtons = ["open-library-import-back", "open-library-import-close", "open-library-import-cancel"]
+        .map((id) => document.getElementById(id) as HTMLButtonElement);
+      function setImportRunning(running: boolean) {
+        importRunning = running;
+        importSubmit.disabled = running;
+        importUsername.disabled = running;
+        importDismissButtons.forEach((button) => { button.disabled = running; });
+        importForm.setAttribute("aria-busy", String(running));
+      }
       openLibrarySyncButtonSignedIn.addEventListener("click", () => {
         accountDialog.close();
+        if (importRunning) {
+          importDialog.showModal();
+          return;
+        }
         importMessage.textContent = "";
         importMessage.dataset.state = "";
         importDialog.showModal();
         if (canAutoFocusTextFields()) importUsername.focus();
       });
       document.getElementById("open-library-import-back")?.addEventListener("click", () => {
+        if (importRunning) return;
         importDialog.close();
         accountDialog.showModal();
       });
       for (const id of ["open-library-import-close", "open-library-import-cancel"]) {
-        document.getElementById(id)?.addEventListener("click", () => importDialog.close());
+        document.getElementById(id)?.addEventListener("click", () => {
+          if (!importRunning) importDialog.close();
+        });
       }
+      importDialog.addEventListener("keydown", (event) => {
+        if (event.key === "Escape" && importRunning) event.preventDefault();
+      });
+      importDialog.addEventListener("cancel", (event) => {
+        if (importRunning) event.preventDefault();
+      });
       importDialog.addEventListener("click", (event) => {
-        if (event.target !== importDialog) return;
+        if (event.target !== importDialog || importRunning) return;
         const rect = importDialog.getBoundingClientRect();
         if (event.clientX < rect.left || event.clientX > rect.right
           || event.clientY < rect.top || event.clientY > rect.bottom) importDialog.close();
       });
       importForm.addEventListener("submit", async (event) => {
         event.preventDefault();
+        if (importRunning) return;
         const owner = websiteOwner;
         const accountGeneration = websiteAccountGeneration;
         importMessage.dataset.state = "error";
@@ -3728,9 +3752,9 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
           importMessage.textContent = "Enter a valid Open Library username.";
           return;
         }
-        importSubmit.disabled = true;
+        setImportRunning(true);
         importMessage.dataset.state = "pending";
-        importMessage.textContent = "Importing your public reading lists...";
+        importMessage.textContent = "Importing your public reading lists... This can take a few minutes. Please keep this box open.";
         try {
           const response = await fetch(`/api/openlibrary-reading-log.json?public=1&username=${encodeURIComponent(username)}`, {
             credentials: "omit",
@@ -3762,7 +3786,7 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
             ? error.name === "TimeoutError" ? "Open Library took too long. No books were imported. Please try again." : error.message
             : "Could not import Open Library lists. Your saved books were kept.";
         } finally {
-          importSubmit.disabled = false;
+          setImportRunning(false);
         }
       });
       openLibraryBackButton.addEventListener("click", () => {

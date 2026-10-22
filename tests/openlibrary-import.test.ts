@@ -43,3 +43,14 @@ test('invalid responses fail without mutating any existing books', () => {
   ]));
   assert.deepEqual(existing, [book]);
 });
+
+test('one-time imports preserve website books removed from Open Library and existing shelf choices', () => {
+  const existing = [
+    { ...book, status: 'Reading' },
+    { key: '/works/OL2W', title: 'Removed from Open Library', status: 'Read' },
+  ];
+  const imported = mergeOpenLibraryImport(existing, [{ ...book, status: 'Plan to Read' }]);
+  assert.equal(imported.added, 0);
+  assert.deepEqual(imported.books, existing);
+  assert.equal(imported.books.length, 2);
+});

@@ -87,8 +87,8 @@ for (const quiet of [false, true]) {
   });
 }
 
-test('startup sync is foreground for Open Library-only accounts without a no-open-dialog condition', () => {
+test('startup sync is always background, including Open Library-only accounts', () => {
   const startup = page.slice(page.indexOf('          const startupUser ='), page.indexOf('      keepTypingFocus();'));
-  assert.match(startup, /quiet: accountDialog\.dataset\.openLibraryOnly !== "true"/);
-  assert.doesNotMatch(startup, /querySelector|startupBoxOpened/);
+  assert.match(startup, /syncOpenLibrary\(startupUser, \{ quiet: true \}\)/);
+  assert.doesNotMatch(startup, /showModal|quiet: accountDialog/);
 });

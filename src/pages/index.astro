@@ -279,6 +279,29 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
         font-size: 0.85rem;
       }
       #google-reconnect-status[hidden] { display: none; }
+      #open-library-sync-warning {
+        position: fixed;
+        top: 1rem;
+        right: 1rem;
+        z-index: 20;
+        box-sizing: border-box;
+        width: min(28rem, calc(100vw - 2rem));
+        margin: 0;
+        padding: 0.85rem 1rem;
+        border: 1px solid var(--border-dark);
+        border-radius: 12px;
+        background: var(--surface-dark);
+        color: var(--text-dark);
+        font-size: 0.85rem;
+      }
+      #open-library-sync-warning button {
+        margin-left: 0.5rem;
+        color: inherit;
+        background: transparent;
+        border: 1px solid var(--border-dark);
+        border-radius: 4px;
+        cursor: pointer;
+      }
       :global(.shelf-undo-stack) {
         position: fixed;
         bottom: 1rem;
@@ -1821,6 +1844,10 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
 
     <WebsiteAccount />
     <p id="google-reconnect-status" role="status" aria-live="polite" hidden></p>
+    <div id="open-library-sync-warning" hidden>
+      <span id="open-library-sync-warning-message" role="status" aria-live="polite"></span>
+      <button type="button" id="open-library-sync-warning-dismiss">Dismiss</button>
+    </div>
 
     <!-- Avoids "back to top" class/label text that ad blockers (e.g. Brave Shields) hide. -->
     <button type="button" class="shelf-jump-button" aria-label="Jump to start of list" title="Jump to start of list" hidden>↑</button>
@@ -1937,6 +1964,7 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
     <script>
       import { createBookRating, isBookRating } from "../lib/book-rating";
       import { mergeOpenLibraryImport } from "../lib/openlibrary-import";
+      import { preserveOpenLibraryEdits } from "../lib/openlibrary-sync";
       import { createCloudLibraryClient } from "../lib/cloud-library-client";
       import { cachedCoverUrl } from "../lib/cover-url";
       import { keepTypingFocus } from "../lib/keep-typing-focus";
@@ -2508,7 +2536,7 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
         || accountButton.dataset.initialSignedIn === "true";
       let openLibrarySyncRunning = false;
       let cloudSyncRunning = false;
-      // While Open Library syncs, its box can't be closed, but never for longer than this.
+      // Explicit sign-in and sync dialogs stay locked until the request settles.
       let openLibrarySyncLocked = false;
 
       function refreshLibraryView() {
@@ -2527,6 +2555,7 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
         storage: localStorage,
         getBooks: () => localBooks,
         accountChanged: () => {
+          showOpenLibrarySyncWarning("");
           [...shelfUndoNotifications].forEach(dismissShelfUndoToast);
           window.dispatchEvent(new Event("library:exit-selection-mode"));
           document.querySelectorAll<HTMLDialogElement>("dialog[open]").forEach((dialog) => dialog.close());
@@ -3039,6 +3068,15 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
         openLibrarySyncStatus.textContent = message;
       }
 
+      function showOpenLibrarySyncWarning(message: string) {
+        const warning = document.getElementById("open-library-sync-warning")!;
+        document.getElementById("open-library-sync-warning-message")!.textContent = message;
+        warning.hidden = !message;
+      }
+      document.getElementById("open-library-sync-warning-dismiss")!.addEventListener("click", () => {
+        showOpenLibrarySyncWarning("");
+      });
+
       /** Saves the list without sending anything, for changes that came from Open Library. */
       function saveLocalBooksWithoutPush(cloudChange = true) {
         localStorage.setItem(savedBooksKey, JSON.stringify(localBooks));
@@ -3086,6 +3124,7 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
       }
 
       function handleOpenLibraryLoggedOut() {
+        showOpenLibrarySyncWarning("");
         verifiedOpenLibraryUser = null;
         localStorage.removeItem(openLibraryPushUserKey);
         updateOpenLibraryAccountView();
@@ -3274,6 +3313,7 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
           updateOpenLibraryAccountView();
           openLibraryAccountMessage.textContent = "";
           showOpenLibraryStatus("");
+          showOpenLibrarySyncWarning("");
           openLibrarySyncDialog.close();
           cloudLibraryStatus.textContent = websiteOwner
             ? "Logged out of Open Library."
@@ -3501,6 +3541,7 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
         confirmed: boolean,
         state: { quiet: boolean; sendLocalOnlyBooks: boolean },
       ) {
+        const accountGeneration = websiteAccountGeneration;
         const previousUsername = confirmed ? null : otherOpenLibraryAccountInList(username);
         // Background syncs must never pop up a question; the user can confirm by syncing manually.
         if (previousUsername && state.quiet) return;
@@ -3525,6 +3566,8 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
             throw new Error(`${waitingChanges} ${waitingChanges === 1 ? "change hasn't" : "changes haven't"} reached Open Library yet, so syncing was skipped to keep them. Try again in a minute.`);
           }
 
+          if (accountGeneration !== websiteAccountGeneration || getOpenLibraryPushUser() !== username) return;
+          const booksBeforePull = structuredClone(localBooks);
           showOpenLibraryCheckingMessage();
           if (!state.quiet) showOpenLibraryStatus("Checking for updates from Open Library.");
           const response = await fetch(
@@ -3532,6 +3575,7 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
             { signal: AbortSignal.timeout(180000) },
           );
           const data = await response.json();
+          if (accountGeneration !== websiteAccountGeneration || getOpenLibraryPushUser() !== username) return;
           if (!response.ok) throw new Error(data.error || "Could not sync Open Library.");
           if (getOpenLibraryPushUser() !== username) {
             throw new Error("Open Library account changed. Your current library was kept.");
@@ -3547,7 +3591,7 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
           const incompleteStatuses = new Set(
             incompleteShelves.map((shelf: any) => shelf.status),
           );
-          const previousSyncedBooks = localBooks.filter(
+          const previousSyncedBooks = booksBeforePull.filter(
             (book) => book.openLibrarySyncUsername === username,
           );
 
@@ -3570,7 +3614,7 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
           );
           const previousBookIndex = createSyncBookIndex(previousSyncedBooks, matchesSyncedBook);
           const syncedWorkIds = new Set(syncedBooks.map((book: any) => workIdOf(book)).filter(Boolean));
-          const nextBooks = localBooks.flatMap((book) => {
+          const nextBooks = booksBeforePull.flatMap((book) => {
             if (!book.openLibrarySyncUsername) return [book];
             if (book.openLibrarySyncUsername !== username) return [];
             if (incompleteStatuses.has(book.status)) return [book];
@@ -3613,11 +3657,13 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
             }
           });
 
-          const listChanged = JSON.stringify(nextBooks) !== JSON.stringify(localBooks);
-          localBooks = nextBooks;
+          const mergedBooks = preserveOpenLibraryEdits(booksBeforePull, localBooks, nextBooks);
+          const listChanged = JSON.stringify(mergedBooks) !== JSON.stringify(localBooks);
+          localBooks = mergedBooks;
           saveLocalBooksWithoutPush();
           if (listChanged) refreshLibraryView();
           await cloudLibrary?.sync();
+          if (accountGeneration !== websiteAccountGeneration || getOpenLibraryPushUser() !== username) return;
           localStorage.setItem(openLibraryUsernameKey, username);
           localStorage.setItem(openLibraryLastSyncKey, String(Date.now()));
           const incompleteMessage = incompleteShelves
@@ -3649,14 +3695,17 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
 
           openLibrarySyncMessage.textContent = syncWarnings ? syncResult : "Up to date.";
           showOpenLibraryStatus(syncWarnings ? syncResult : "");
+          showOpenLibrarySyncWarning(syncWarnings ? syncResult : "");
         } catch (error) {
+          if (accountGeneration !== websiteAccountGeneration || getOpenLibraryPushUser() !== username) return;
           const message = error instanceof Error
             ? error.name === "TimeoutError"
               ? "Open Library took too long. Your saved books were kept. Please try again."
               : error.message
             : "Could not sync Open Library.";
           openLibrarySyncMessage.textContent = message;
-          if (!state.quiet) showOpenLibraryStatus(message);
+          showOpenLibraryStatus(message);
+          showOpenLibrarySyncWarning(message);
         } finally {
           openLibrarySyncSubmit.disabled = false;
         }
@@ -3927,9 +3976,7 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
           await flushOpenLibraryChanges();
           const startupUser = cloudReauthenticationRequired ? null : getOpenLibraryPushUser();
           if (startupUser && openLibrarySyncDue()) {
-            const startupSync = syncOpenLibrary(startupUser, {
-              quiet: accountDialog.dataset.openLibraryOnly !== "true",
-            });
+            const startupSync = syncOpenLibrary(startupUser, { quiet: true });
             openLibrarySyncSubmit.disabled = true;
             await startupSync;
             // Close it whether the site or you opened it during the sync.

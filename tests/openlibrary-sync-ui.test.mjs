@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import { test } from 'node:test';
 import ts from 'typescript';
+import { preserveOpenLibraryEdits } from '../src/lib/openlibrary-sync.ts';
 
 const page = readFileSync(new URL('../src/pages/index.astro', import.meta.url), 'utf8');
 const start = page.indexOf('      type OpenLibrarySyncOptions =');
@@ -16,6 +17,9 @@ function setup(books, responseBooks = books, incompleteShelves = []) {
   const context = vm.createContext({
     localBooks: structuredClone(books),
     AbortSignal,
+    structuredClone,
+    preserveOpenLibraryEdits,
+    websiteAccountGeneration: 0,
     websiteAccountCheck: Promise.resolve(),
     accountDialog: { close() {} },
     openLibrarySyncMessage: { textContent: '' },
@@ -53,16 +57,18 @@ function setup(books, responseBooks = books, incompleteShelves = []) {
     refreshLibraryView: () => { context.viewRefreshes++; },
     updateOpenLibrarySyncLabel: () => {},
     showOpenLibraryStatus: (message) => { context.status = message; },
+    showOpenLibrarySyncWarning: (message) => { context.warning = message; },
   });
   vm.runInContext(script, context);
   return {
     context,
-    async sync(options = {}) {
+    async sync(options = {}, duringPull = () => {}) {
       const promise = context.syncOpenLibrary('reader', options);
       // Let the cloud sync and pending-write checks finish before resolving the pull.
       await new Promise((resolve) => setImmediate(resolve));
       assert.equal(context.openLibrarySyncMessage.textContent,
         'Your synced books are ready to use.\nChecking for updates from Open Library...');
+      duringPull(context);
       finishRequest({
         ok: true,
         json: async () => ({ books: structuredClone(responseBooks), incompleteShelves }),
@@ -102,6 +108,7 @@ test('background sync does not reopen a dialog the user has closed', async () =>
   await sync({ quiet: true });
   assert.equal(context.openLibrarySyncDialog.open, false);
   assert.equal(context.viewRefreshes, 1);
+  assert.equal(context.warning, '');
 });
 
 test('malformed sync keeps saved books and shows an error instead of success', async () => {
@@ -118,4 +125,52 @@ test('incomplete shelves keep existing books and show a warning', async () => {
   await sync();
   assert.equal(context.localBooks.length, 1);
   assert.match(context.openLibrarySyncMessage.textContent, /older synced books were kept/);
+  assert.match(context.warning, /older synced books were kept/);
+});
+
+test('background failure is visible without opening a modal or losing books', async () => {
+  const { context, sync } = setup([book], null);
+  context.openLibrarySyncDialog.open = false;
+  await sync({ quiet: true });
+  assert.equal(context.openLibrarySyncDialog.open, false);
+  assert.equal(context.localBooks[0].title, 'Original');
+  assert.match(context.warning, /incomplete sync response/);
+  assert.equal(context.status, context.warning);
+});
+
+test('a shelf move and rating made during the pull survive stale results', async () => {
+  const { context, sync } = setup([book]);
+  await sync({ quiet: true }, (ctx) => {
+    ctx.localBooks[0].status = 'Reading';
+    ctx.localBooks[0].rating = 5;
+  });
+  assert.equal(context.localBooks[0].status, 'Reading');
+  assert.equal(context.localBooks[0].rating, 5);
+});
+
+test('removing a book during the pull does not resurrect it', async () => {
+  const { context, sync } = setup([book]);
+  await sync({ quiet: true }, (ctx) => { ctx.localBooks = []; });
+  assert.equal(context.localBooks.length, 0);
+});
+
+test('adding a book during the pull preserves the addition', async () => {
+  const { context, sync } = setup([book]);
+  await sync({ quiet: true }, (ctx) => {
+    ctx.localBooks.push({ key: '/works/OL2W', title: 'New', status: 'Read' });
+  });
+  assert.equal(context.localBooks.length, 2);
+  assert.ok(context.localBooks.some((saved) => saved.title === 'New'));
+});
+
+test('a disconnected or switched account discards an in-flight pull', async () => {
+  for (const change of [
+    (ctx) => { ctx.websiteAccountGeneration++; },
+    (ctx) => { ctx.getOpenLibraryPushUser = () => null; },
+  ]) {
+    const { context, sync } = setup([book], [{ ...book, title: 'Stale' }]);
+    await sync({ quiet: true }, change);
+    assert.equal(context.localBooks[0].title, 'Original');
+    assert.equal(context.viewRefreshes, 0);
+  }
 });

@@ -123,13 +123,21 @@ first). The password or keys are sent only to Open Library to log in and are nev
 The site keeps Open Library's login session in an HTTP-only cookie. While you're
 logged in, adding, moving or deleting a book here also does it on Open Library, and
 changes made on Open Library come here every 15 minutes or when you choose Sync now.
-Open Library-only startup syncs and sign-in syncs open the connection dialog
-automatically. Sign-in and sync keep Back, Close, Cancel, Disconnect, Escape and
+Routine startup syncs use saved books immediately and check for updates in the
+background, without opening a dialog. The sidebar indicates sync progress.
+Edits made during a reading-log request, including additions, removals, shelf
+moves and ratings, take precedence over its results. Results from a disconnected
+or changed account are discarded. Failed and incomplete syncs show a dismissible,
+non-blocking warning and keep details in the account dialog; a successful sync
+clears the warning. The existing 15-minute freshness interval is unchanged.
+Explicit sign-in and Sync now open the connection dialog.
+Sign-in and sync keep Back, Close, Cancel, Disconnect, Escape and
 backdrop dismissal disabled until completion or failure, without a timed unlock.
 Login and reading-log requests time out after three minutes and surface errors.
 Routine periodic checks stay in the background. Successful syncs update lists
 without reloading; the dialog shows "Up to date" and then closes after 1.2 seconds
-for sign-in, startup and manual syncs. Errors and incomplete-sync warnings stay visible.
+for sign-in and manual syncs, or when opened during a background sync.
+Errors and incomplete-sync warnings stay visible.
 Right after logging in, and whenever you choose Sync now, books saved only in this
 browser are added to Open Library unless Open Library already has that work. The sync
 dialog shows how many books are waiting. Changes made while offline or logged out

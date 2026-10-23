@@ -1963,6 +1963,7 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
 
     <script>
       import { createBookRating, isBookRating } from "../lib/book-rating";
+      import { normalizeSearchText } from "../lib/search-text";
       import { mergeOpenLibraryImport } from "../lib/openlibrary-import";
       import { preserveOpenLibraryEdits } from "../lib/openlibrary-sync";
       import { createCloudLibraryClient } from "../lib/cloud-library-client";
@@ -4991,9 +4992,7 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
             .replace(/^ISBN(?:-1[03])?\s*[:#]?\s*/i, "")
             .replace(/[\s-]/g, "")
             .toUpperCase();
-          const queryTerms = query.split(/\s+/).filter(Boolean).map((term) =>
-            term.normalize("NFKD").replace(/[\u0300-\u036f]/g, ""),
-          );
+          const queryTerms = normalizeSearchText(query).split(/\s+/).filter(Boolean);
           const isWithinOneEdit = (first: string, second: string) => {
             if (Math.abs(first.length - second.length) > 1) return false;
             let firstIndex = 0;
@@ -5095,9 +5094,7 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
             const author = card.dataset.author || "";
             const isbn = String(card.dataset.isbn || "").replace(/[\s-]/g, "").toUpperCase();
             const matchesIsbn = normalizedIsbnQuery.length >= 10 && isbn.includes(normalizedIsbnQuery);
-            const searchableFields = [title, subtitle, author].map((field) =>
-              field.normalize("NFKD").replace(/[\u0300-\u036f]/g, ""),
-            );
+            const searchableFields = [title, subtitle, author].map(normalizeSearchText);
             const matchesText = queryTerms.every((term) => searchableFields.some((field) => {
               if (field.includes(term)) return true;
               if (term.length < 6) return false;

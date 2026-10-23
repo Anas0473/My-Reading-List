@@ -4,6 +4,12 @@ Detailed behavior and setup notes. For an overview, see the [README](../README.m
 
 ## Reading list controls
 
+Library filtering ignores straight and curly apostrophes and common transliteration
+marks in titles, subtitles and authors. For example, pasted `Qur’an`, saved `Qur'an`
+and unpunctuated `Quran` match each other. Case-insensitive and accent-insensitive
+matching, ISBN lookup and the existing typo tolerance are preserved. Displayed
+titles and saved book data are not changed.
+
 Books in Read can be given an optional personal whole-star rating from 1 to 5
 in Book details. Ratings can be changed or cleared and appear on Read cards.
 They are stored per saved edition and included in website cloud sync, not sent

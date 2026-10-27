@@ -173,6 +173,12 @@ export const GET: APIRoute = async ({ url, cookies }) => {
           throw new Error(`Open Library did not return edition ${book.editionKey}`);
         }
 
+        const editionAuthors = Array.isArray(edition.authors)
+          ? edition.authors
+            .map((author: any) => typeof author?.name === 'string' ? author.name.trim() : '')
+            .filter(Boolean)
+          : [];
+        if (editionAuthors.length) book.author = editionAuthors.join(', ');
         book.title = edition.title || book.title;
         book.subtitle = edition.subtitle || null;
         book.pubDate = String(Array.isArray(edition.publish_date)

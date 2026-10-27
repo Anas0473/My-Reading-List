@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { GET } from '../src/pages/api/openlibrary-reading-log.json';
+import { GET } from '../src/pages/api/openlibrary-reading-log.json.ts';
 
 test('sync uses current edition covers, preserves logged identity and reports failed lookups', async () => {
   const originalFetch = globalThis.fetch;
@@ -15,7 +15,7 @@ test('sync uses current edition covers, preserves logged identity and reports fa
         ? [{
           work: {
             key: '/works/OL46026463W', title: 'Politikens Filosofileksikon',
-            cover_id: 15258954,
+            cover_id: 15258954, author_names: ['Stale work author'],
           },
           logged_edition: '/books/OL62599958M',
           logged_date: '2026/10/02, 10:00:00',
@@ -35,6 +35,7 @@ test('sync uses current edition covers, preserves logged identity and reports fa
           details: {
             key: mode === 'wrong-edition' ? '/books/OL1M' : '/books/OL62599958M',
             title: 'Politikens Filosofileksikon',
+            authors: [{ name: 'Current edition author' }, { name: 'Second edition author' }],
             covers: mode === 'coverless' ? [-1] : [-1, 15261064, 15258954],
             publish_date: '2014', languages: [{ key: '/languages/dan' }],
             isbn_13: ['9788740021721'], publishers: ['Politiken'],
@@ -66,6 +67,7 @@ test('sync uses current edition covers, preserves logged identity and reports fa
     assert.equal(data.books[0].editionHeroImage, 'https://covers.openlibrary.org/b/id/15261064-M.jpg');
     assert.equal(data.books[0].editionKey, '/books/OL62599958M');
     assert.equal(data.books[0].loggedEditionKey, '/books/OL62599958M');
+    assert.equal(data.books[0].author, 'Current edition author, Second edition author');
     assert.equal(data.books[0].editionLanguage, 'dan');
     assert.equal(data.books[0].isbn, '9788740021721');
     assert.equal(data.books[0].publisher, 'Politiken');

@@ -176,7 +176,7 @@ test('sync refreshes all 238 editions in five batches and rejects failures in th
       } as unknown as Parameters<typeof GET>[0]);
       const data = await response.json();
       assert.deepEqual(batches.map((batch) => batch.length),
-        mode === 'failed' ? [50, 50, 50, 50, 38, 38] : [50, 50, 50, 50, 38]);
+        mode === 'failed' ? [50, 50, 50, 50, 38, 38, 38] : [50, 50, 50, 50, 38]);
       assert.equal(new Set(batches.flat()).size, 238);
       if (mode === 'success') {
         assert.equal(response.status, 200);
@@ -185,7 +185,8 @@ test('sync refreshes all 238 editions in five batches and rejects failures in th
         assert.deepEqual(data.incompleteShelves, []);
       } else {
         assert.equal(response.status, 502);
-        assert.equal(data.error, 'Could not sync the Open Library reading log. Please try again.');
+        assert.match(data.error, /Your saved books were kept/);
+        assert.match(data.error, /Failed while loading edition details \(batch 5 of 5\)/);
         assert.equal(data.books, undefined, 'a late failure must not return partially refreshed books');
       }
     }
@@ -194,7 +195,7 @@ test('sync refreshes all 238 editions in five batches and rejects failures in th
   }
 });
 
-test('shelf timeouts retry once, but malformed shelf pages never become an empty successful sync', async () => {
+test('shelf timeouts retry twice, but malformed shelf pages never become an empty successful sync', async () => {
   const originalFetch = globalThis.fetch;
   let mode = 'recover';
   let calls = 0;
@@ -219,10 +220,57 @@ test('shelf timeouts retry once, but malformed shelf pages never become an empty
         assert.deepEqual(data.books, []);
         assert.deepEqual(data.incompleteShelves, []);
       } else {
-        assert.equal(calls, mode === 'timeout' ? 2 : 1);
+        assert.equal(calls, mode === 'timeout' ? 3 : 1);
         assert.equal(response.status, 502);
         assert.equal(data.books, undefined);
+        assert.match(data.error, /Failed while reading the Plan to Read shelf \(page 1\)/);
         if (mode === 'timeout') assert.match(data.error, /even after retrying.*saved books were kept/);
+      }
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('cover lookups retry network failures and never return partial books after exhausting retries', async () => {
+  const originalFetch = globalThis.fetch;
+  let recover = true;
+  let coverCalls = 0;
+  globalThis.fetch = async (input) => {
+    const url = new URL(String(input));
+    if (url.pathname.startsWith('/people/')) {
+      return Response.json({
+        reading_log_entries: url.pathname.includes('/want-to-read.')
+          && url.searchParams.get('page') === '1'
+          ? [{ work: { key: '/works/OL1W', title: 'Test book' }, logged_edition: '/books/OL1M' }]
+          : [],
+      });
+    }
+    if (url.pathname === '/api/books') {
+      return Response.json({ 'OLID:OL1M': { details: { key: '/books/OL1M', title: 'Test book' } } });
+    }
+    assert.equal(url.pathname, '/works/OL1W/editions.json');
+    coverCalls++;
+    if (!recover || coverCalls === 1) throw new TypeError('fetch failed');
+    return Response.json({ entries: [{ key: '/books/OL2M', title: 'Covered book', covers: [123] }] });
+  };
+  try {
+    for (recover of [true, false]) {
+      coverCalls = 0;
+      const response = await GET({
+        url: new URL('http://localhost/api/openlibrary-reading-log.json?username=tester'),
+        cookies: { get: () => undefined },
+      } as unknown as Parameters<typeof GET>[0]);
+      const data = await response.json();
+      assert.equal(coverCalls, recover ? 2 : 3);
+      assert.equal(response.status, recover ? 200 : 502);
+      if (recover) {
+        assert.equal(data.books[0].editionKey, '/books/OL2M');
+        assert.equal(data.books[0].loggedEditionKey, '/books/OL1M');
+      } else {
+        assert.equal(data.books, undefined);
+        assert.match(data.error, /Could not reach Open Library after retrying/);
+        assert.match(data.error, /Failed while looking for a cover for \/works\/OL1W/);
       }
     }
   } finally {

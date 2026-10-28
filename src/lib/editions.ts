@@ -1,3 +1,5 @@
+import { readOpenLibrary } from './openlibrary-read.ts';
+
 // Finds the best matching edition, preferring editions with covers and then newer dates.
 export async function findMatchingEdition(
   workKey: string,
@@ -8,21 +10,24 @@ export async function findMatchingEdition(
   requireAvailable = false,
 ) {
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), timeoutMs);
     const params = new URLSearchParams({
       limit: language ? '1000' : '100',
       fields: 'key,title,subtitle,publish_date,publishers,isbn_10,isbn_13,covers,languages',
     });
-    let response: Response;
-    try {
-      response = await fetch(`https://openlibrary.org/${workKey}/editions.json?${params}`, {
-        signal: controller.signal,
-        headers: { 'User-Agent': 'my-book-library/0.0.1' },
-      });
-    } finally {
-      clearTimeout(timeout);
-    }
+    const url = `https://openlibrary.org/${workKey}/editions.json?${params}`;
+    const headers = { 'User-Agent': 'my-book-library/0.0.1' };
+    const { response, data } = requireAvailable
+      ? await readOpenLibrary(url, { timeoutMs, headers }, (response) => response.json())
+      : await (async () => {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), timeoutMs);
+        try {
+          const response = await fetch(url, { signal: controller.signal, headers });
+          return { response, data: response.ok ? await response.json() : null };
+        } finally {
+          clearTimeout(timeout);
+        }
+      })();
     if (!response.ok) {
       if (requireAvailable && response.status !== 404) {
         throw new Error(`Open Library editions returned ${response.status}`);
@@ -30,7 +35,6 @@ export async function findMatchingEdition(
       return null;
     }
 
-    const data = await response.json();
     const entries = (data.entries || []).filter((edition: any) => /^\/books\/OL\d+M$/i.test(edition.key || ''));
     const normalizedTitle = (edition: any) => String(edition.title || '').trim().toLocaleLowerCase();
     const languageEntries = language

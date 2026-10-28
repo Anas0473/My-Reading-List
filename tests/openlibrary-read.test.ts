@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { OpenLibraryReadTimeoutError, readOpenLibrary } from '../src/lib/openlibrary-read.ts';
+import { findMatchingEdition } from '../src/lib/editions.ts';
 
 const url = 'https://openlibrary.org/api/books';
 const options = { timeoutMs: 20, retryDelayMs: 0, cache: 'no-store' as const };
@@ -153,6 +154,57 @@ test('short Retry-After delays are honored before the single retry', async () =>
     const result = await readOpenLibrary(url, options, (response) => response.json());
     assert.deepEqual(result.data, { recovered: true });
     assert.equal(calls, 2);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('sync cover reads retry temporary HTTP failures but search cover reads stay single-attempt', async () => {
+  const originalFetch = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = async () => {
+    calls++;
+    if (calls === 1) return new Response('', { status: 503 });
+    return Response.json({ entries: [{ key: '/books/OL1M', title: 'Book', covers: [123] }] });
+  };
+  try {
+    const edition = await findMatchingEdition('works/OL1W', '', undefined, 20000, true, true);
+    assert.equal(edition.key, '/books/OL1M');
+    assert.equal(calls, 2);
+    calls = 0;
+    assert.equal(await findMatchingEdition('works/OL1W', ''), null);
+    assert.equal(calls, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('sync cover reads time out during body loading and preserve 404-as-no-edition behavior', async () => {
+  const originalFetch = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = async (_input, init) => {
+    calls++;
+    const signal = init?.signal;
+    assert.ok(signal);
+    return new Response(new ReadableStream({
+      start(controller) {
+        signal.addEventListener('abort', () => controller.error(new DOMException('Aborted', 'AbortError')), { once: true });
+      },
+    }));
+  };
+  try {
+    await assert.rejects(
+      findMatchingEdition('works/OL1W', '', undefined, 20, true, true),
+      OpenLibraryReadTimeoutError,
+    );
+    assert.equal(calls, 3);
+    calls = 0;
+    globalThis.fetch = async () => {
+      calls++;
+      return new Response('', { status: 404 });
+    };
+    assert.equal(await findMatchingEdition('works/OL1W', '', undefined, 20, true, true), null);
+    assert.equal(calls, 1);
   } finally {
     globalThis.fetch = originalFetch;
   }

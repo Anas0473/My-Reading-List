@@ -1,7 +1,7 @@
 import type { APIRoute } from 'astro';
-import { findMatchingEdition } from '../../lib/editions';
-import { getSession, sessionHeaders } from '../../lib/openlibrary-session';
-import { OpenLibraryReadTimeoutError, readOpenLibrary } from '../../lib/openlibrary-read';
+import { findMatchingEdition } from '../../lib/editions.ts';
+import { getSession, sessionHeaders } from '../../lib/openlibrary-session.ts';
+import { OpenLibraryReadTimeoutError, readOpenLibrary } from '../../lib/openlibrary-read.ts';
 
 const shelves = [
   { id: 'want-to-read', status: 'Plan to Read' },
@@ -44,6 +44,7 @@ export const GET: APIRoute = async ({ url, cookies }) => {
   const incompleteShelves: Array<{ status: string }> = [];
   let requestCount = 0;
   let truncated = false;
+  let syncStage = 'reading shelves';
 
   try {
     for (const shelf of shelves) {
@@ -51,6 +52,7 @@ export const GET: APIRoute = async ({ url, cookies }) => {
       const seenPageSignatures = new Set<string>();
 
       for (let page = 1; page <= maxPagesPerShelf; page++) {
+        syncStage = `reading the ${shelf.status} shelf (page ${page})`;
         if (requestCount > 0) {
           await new Promise((resolve) => setTimeout(resolve, requestDelayMs));
         }
@@ -141,6 +143,7 @@ export const GET: APIRoute = async ({ url, cookies }) => {
     const editionsToEnrich = Array.from(books.values()).filter((book) => book.editionKey);
     const editionsWithCovers = new Set<string>();
     for (let offset = 0; offset < editionsToEnrich.length; offset += editionBatchSize) {
+      syncStage = `loading edition details (batch ${Math.floor(offset / editionBatchSize) + 1} of ${Math.ceil(editionsToEnrich.length / editionBatchSize)})`;
       if (requestCount > 0) {
         await new Promise((resolve) => setTimeout(resolve, requestDelayMs));
       }
@@ -204,6 +207,7 @@ export const GET: APIRoute = async ({ url, cookies }) => {
       (book) => !editionsWithCovers.has(book.loggedEditionKey),
     );
     for (const book of coverlessBooks) {
+      syncStage = `looking for a cover for ${book.workKey}`;
       if (requestCount > 0) {
         await new Promise((resolve) => setTimeout(resolve, requestDelayMs));
       }
@@ -212,7 +216,7 @@ export const GET: APIRoute = async ({ url, cookies }) => {
       const workPath = book.workKey.replace(/^\/+/, '');
       const hasCover = (edition: any) =>
         Array.isArray(edition?.covers) && edition.covers.some((coverId: any) => Number(coverId) > 0);
-      const edition = await findMatchingEdition(workPath, '', undefined, 5000, true, true);
+      const edition = await findMatchingEdition(workPath, '', undefined, 20000, true, true);
       if (!hasCover(edition)) continue;
 
       const coverId = edition.covers.find((id: any) => Number(id) > 0);
@@ -237,13 +241,14 @@ export const GET: APIRoute = async ({ url, cookies }) => {
       incompleteShelves,
     });
   } catch (error) {
-    console.error('Open Library reading log sync error:', error);
+    console.error(`Open Library reading log sync error while ${syncStage}:`, error);
+    const message = error instanceof OpenLibraryReadTimeoutError
+      ? 'Open Library took too long to respond, even after retrying. Your saved books were kept. Please try again.'
+      : error instanceof TypeError
+        ? 'Could not reach Open Library after retrying. Your saved books were kept. Please try again shortly.'
+        : 'Could not sync the Open Library reading log. Your saved books were kept. Please try again.';
     return jsonResponse(
-      { error: error instanceof OpenLibraryReadTimeoutError
-        ? 'Open Library took too long to respond, even after retrying. Your saved books were kept. Please try again.'
-        : error instanceof TypeError
-          ? 'Could not reach Open Library after retrying. Your saved books were kept. Please try again shortly.'
-        : 'Could not sync the Open Library reading log. Please try again.' },
+      { error: `${message} Failed while ${syncStage}.` },
       502,
     );
   }

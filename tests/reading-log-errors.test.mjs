@@ -14,6 +14,7 @@ test('numeric publication years without edition dates produce importable books',
     exports, URL, URLSearchParams, Response, console,
     setTimeout: (callback) => { callback(); },
     require(name) {
+      name = name.replace(/\.ts$/, '');
       if (name.endsWith('openlibrary-read')) return {
         OpenLibraryReadTimeoutError: class extends Error {},
         readOpenLibrary: async (url) => typeof url === 'string' ? {
@@ -53,6 +54,7 @@ for (const status of [401, 403, 404, 503]) {
     const context = vm.createContext({
       exports, URL, Response,
       require(name) {
+        name = name.replace(/\.ts$/, '');
         if (name.endsWith('openlibrary-read')) return {
           OpenLibraryReadTimeoutError: class extends Error {},
           readOpenLibrary: async () => ({ response: new Response(null, { status }), data: null }),

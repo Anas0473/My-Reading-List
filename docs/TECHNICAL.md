@@ -101,12 +101,14 @@ the index is out of date. Failed edition lookups fail the sync without replacing
 your saved books.
 Edition details are fetched in batches of up to 50 to reduce requests and waiting.
 Every sync still refreshes all books, with the same request pacing and failure
-checks; no saved metadata is used to hide a failed lookup. Shelf and edition-detail
-reads allow 20 seconds per attempt and retry up to twice after a timeout, network failure
+checks; no saved metadata is used to hide a failed lookup. Shelf, edition-detail,
+and sync cover-fallback reads allow 20 seconds per attempt and retry up to twice after a timeout, network failure
 or temporary HTTP error. Retries use exponential backoff starting at 1.1 seconds and respect Retry-After
 up to 30 seconds; longer delays fail the sync instead of retrying early.
 Failed reads still stop the sync without replacing saved books, and exhausted
-timeouts show a specific warning. Invalid shelf pages also fail rather than being
+timeouts show a specific warning. Errors identify the shelf page, edition batch,
+or cover-fallback work being read, both in the UI and server logs.
+Invalid shelf pages also fail rather than being
 treated as empty shelves. Login and shelf-write requests are not retried by this logic.
 Click outside the Open Library connection dialog, press Escape, or choose Cancel
 to close it without starting a sync.

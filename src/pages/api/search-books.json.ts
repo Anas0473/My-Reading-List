@@ -434,6 +434,7 @@ export const GET: APIRoute = async ({ url }) => {
           })
           .join(' AND ')
       : query;
+    const phraseQuery = `title:"${trimmedQuery.replace(/["\\]/g, '\\$&')}"`;
     const hasCompleteResultSet = includeAllResults || authorExact;
     const useOpenLibrarySort = shouldSort && !hasCompleteResultSet;
     const openLibrarySort = sort.startsWith('title')
@@ -444,7 +445,7 @@ export const GET: APIRoute = async ({ url }) => {
           ? 'old'
           : '';
     const searchParams = new URLSearchParams({
-      [searchField]: readableDirectQuery || (isIsbnSearch ? normalizedIsbn : authorKey || structuredQuery),
+      [searchField]: readableDirectQuery || (isIsbnSearch ? normalizedIsbn : authorKey || (isGeneralQuery ? phraseQuery : structuredQuery)),
       fields: 'title,subtitle,author_name,author_key,language,first_publish_year,cover_i,isbn,publisher,key,edition_key,edition_count,ratings_average,ratings_count'
         + (readableOnly ? ',editions,editions.key,editions.ebook_access,editions.ia' : ''),
       limit: String(hasCompleteResultSet ? 1000 : limit),
@@ -473,8 +474,17 @@ export const GET: APIRoute = async ({ url }) => {
       languageSearchParams.set('q', [languageSearchParams.get('q'), readableFilter].filter(Boolean).join(' AND '));
     }
     if (useOpenLibrarySort && openLibrarySort) searchParams.set('sort', openLibrarySort);
-    const apiUrl = `https://openlibrary.org/search.json?${searchParams}`;
+    let apiUrl = `https://openlibrary.org/search.json?${searchParams}`;
     let data = await fetchOpenLibrarySearch(apiUrl);
+
+    // Keep multiword titles together before widening to terms across bibliographic fields.
+    // Open Library also searches alternate edition titles, so keep its pagination and counts.
+    if (isGeneralQuery && data?.numFound === 0) {
+      searchParams.set('q', [structuredQuery, ...exclusionFilters].join(' AND '));
+      languageSearchParams.set('q', [structuredQuery, ...(readableOnly ? [readableFilter] : [])].join(' AND '));
+      apiUrl = `https://openlibrary.org/search.json?${searchParams}`;
+      data = await fetchOpenLibrarySearch(apiUrl);
+    }
 
     if (!data) {
       return unavailableResponse();
@@ -512,10 +522,7 @@ export const GET: APIRoute = async ({ url }) => {
         return isbnEdition;
       });
     }
-    // OpenLibrary's general "q" search matches loosely across unrelated fields
-    // (e.g. subjects and contributor notes). Prefer results where the full phrase
-    // appears in the title, subtitle, or an author's name, but retain top-ranked
-    // results when no visible text matches (for alternate or translated titles).
+    // Look up editions displaying the searched phrase, including alternate or translated titles.
     const normalizedPhrase = query.trim().toLocaleLowerCase();
     const topRankedCount = 5;
     const docs = data.docs || [];

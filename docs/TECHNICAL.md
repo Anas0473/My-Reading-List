@@ -281,6 +281,12 @@ Preview should use a separate database.
 Press Enter in the search field to search immediately or retry the unchanged
 query, keeping its current filters and returning to the first page.
 
+Multiword catalog searches first look for the full phrase in Open Library's
+title index (including alternate edition titles). If there are no matches,
+search widens to terms across title, subtitle and author, allowing a partial
+final term. Both paths retain the selected sort, filters and server pagination;
+phrase matches are not mixed with unrelated broad results.
+
 Search uses Open Library first, then Internet Archive's cataloged books when Open Library is unavailable. No API key is required for the Internet Archive fallback.
 
 Open Library search results are cached for 10 minutes. Before serving a cached

@@ -1266,6 +1266,10 @@ const { libraryBooks = [] } = Astro.props;
     Reading: 'Reading',
     Read: 'Read',
   };
+  const MAX_RECOMMENDATION_SEEDS = 30;
+  const MAX_PRIMARY_RECOMMENDATION_SEEDS = 24;
+  const MAX_PLANNED_RECOMMENDATION_SEEDS = 6;
+  const MAX_FAVOURITE_RECOMMENDATION_SEEDS = 12;
   function getSavedBooks() {
     try {
       const storedBooks = localStorage.getItem(savedBooksKey);
@@ -2165,17 +2169,13 @@ const { libraryBooks = [] } = Astro.props;
       || libraryBooks.some((item: any) => shelfLabels[item.status] && isSameBook(item, book));
   }
 
-  // Favourites (4-5 stars) come first and count more; 1-2 star books are left out.
+  // Favourites and books already read shape the profile; Plan to Read is a smaller signal.
   function getRecommendationSeeds() {
     const books = [
-      ...getSavedBooks().sort((first: any, second: any) =>
-        (Number(second.dateAdded) || 0) - (Number(first.dateAdded) || 0),
-      ),
+      ...getSavedBooks(),
       ...libraryBooks.filter((book: any) => shelfLabels[book.status]),
     ];
-    const seen = new Set<string>();
-    const favorites: string[] = [];
-    const others: string[] = [];
+    const candidates = new Map<string, { seed: string; status: string; rating: number; dateAdded: number }>();
     for (const book of books) {
       if (!shelfLabels[book.status]) continue;
       const workKey = String(book.workKey || book.key || '');
@@ -2183,14 +2183,50 @@ const { libraryBooks = [] } = Astro.props;
       const seed = /^\/?works\/OL\d+W$/i.test(workKey)
         ? workKey.replace(/^\/?/, '/')
         : editionKey.replace(/^\/?/, '/');
-      if (!/^\/(works\/OL\d+W|books\/OL\d+M)$/i.test(seed) || seen.has(seed)) continue;
-      seen.add(seed);
+      if (!/^\/(works\/OL\d+W|books\/OL\d+M)$/i.test(seed)) continue;
       const rating = Number(book.rating) || 0;
       if (rating && rating <= 2) continue;
-      (rating >= 4 ? favorites : others).push(seed);
+      const candidate = {
+        seed,
+        status: book.status,
+        rating,
+        dateAdded: Number(book.dateAdded) || 0,
+      };
+      const existing = candidates.get(seed);
+      const statusWeight = (status: string) => status === 'Read' ? 2 : status === 'Reading' ? 1 : 0;
+      if (
+        !existing
+        || candidate.rating > existing.rating
+        || (candidate.rating === existing.rating && statusWeight(candidate.status) > statusWeight(existing.status))
+      ) {
+        candidates.set(seed, candidate);
+      }
     }
-    const seeds = [...favorites, ...others].slice(0, 12);
-    return { seeds, favorites: favorites.filter((seed) => seeds.includes(seed)) };
+    const newestFirst = (first: { rating: number; dateAdded: number }, second: { rating: number; dateAdded: number }) =>
+      second.rating - first.rating || second.dateAdded - first.dateAdded;
+    const entries = Array.from(candidates.values());
+    const favorites = entries.filter((book) => book.rating >= 4).sort(newestFirst);
+    const read = entries.filter((book) => book.status === 'Read' && book.rating < 4).sort(newestFirst);
+    const reading = entries.filter((book) => book.status === 'Reading' && book.rating < 4).sort(newestFirst);
+    const planned = entries.filter((book) => book.status === 'Plan to Read' && book.rating < 4).sort(newestFirst);
+
+    const selected = new Map<string, { seed: string; status: string; rating: number; dateAdded: number }>();
+    const add = (booksToAdd: typeof entries, limit: number) => {
+      for (const book of booksToAdd) {
+        if (selected.size >= limit) break;
+        selected.set(book.seed, book);
+      }
+    };
+    add(favorites, MAX_FAVOURITE_RECOMMENDATION_SEEDS);
+    add([...read, ...reading], MAX_PRIMARY_RECOMMENDATION_SEEDS);
+    add(planned.slice(0, MAX_PLANNED_RECOMMENDATION_SEEDS), MAX_RECOMMENDATION_SEEDS);
+
+    const seeds = Array.from(selected.keys());
+    return {
+      seeds,
+      favorites: seeds.filter((seed) => candidates.get(seed)!.rating >= 4),
+      read: seeds.filter((seed) => ['Read', 'Reading'].includes(candidates.get(seed)!.status)),
+    };
   }
 
   function getRecommendationLanguages() {
@@ -2235,7 +2271,7 @@ const { libraryBooks = [] } = Astro.props;
   }
 
   function getRecommendationLanguageLabel(languages: string[]) {
-    const basis = 'Picked from your favourite books and the genres in your lists.';
+    const basis = 'Based mainly on your rated favourites and books you’ve read, with a few Plan to Read picks.';
     if (!languages.length) return basis;
     const displayNames = new Intl.DisplayNames(['en'], { type: 'language', fallback: 'none' });
     const names = languages.map((language) => displayNames.of(language) || language.toUpperCase());
@@ -2276,9 +2312,9 @@ const { libraryBooks = [] } = Astro.props;
   }
 
   async function loadRecommended() {
-    const { seeds, favorites } = getRecommendationSeeds();
+    const { seeds, favorites, read } = getRecommendationSeeds();
     const languages = getRecommendationLanguages();
-    const seedKey = `${seeds.join('|')}|${favorites.join('|')}`;
+    const seedKey = `${seeds.join('|')}|${favorites.join('|')}|${read.join('|')}`;
     const readable = currentReadableOnly;
     const requestKey = `${seedKey}|${languages.join(',')}|${readable}`;
     if (!seeds.length) {
@@ -2306,6 +2342,7 @@ const { libraryBooks = [] } = Astro.props;
       const params = new URLSearchParams();
       seeds.forEach((seed) => params.append('seed', seed));
       favorites.forEach((seed) => params.append('favorite', seed));
+      read.forEach((seed) => params.append('read', seed));
       languages.forEach((language) => params.append('language', language));
       if (readable) params.set('readable', '1');
       const response = await fetch(`/api/recommended-books.json?${params}`);

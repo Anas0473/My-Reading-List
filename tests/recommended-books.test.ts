@@ -2,10 +2,11 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { GET } from '../src/pages/api/recommended-books.json.ts';
 
-const getRecommendations = (seeds: string[], languages: string[] = []) => {
+const getRecommendations = (seeds: string[], languages: string[] = [], read: string[] = []) => {
   const params = new URLSearchParams();
   seeds.forEach((seed) => params.append('seed', seed));
   languages.forEach((language) => params.append('language', language));
+  read.forEach((seed) => params.append('read', seed));
   return GET({ url: new URL(`http://localhost/api/recommended-books.json?${params}`) } as Parameters<typeof GET>[0]);
 };
 
@@ -242,8 +243,38 @@ test('recommendations reject missing, excessive and invalid seed IDs', async () 
   assert.equal(empty.status, 400);
   const invalid = await getRecommendations(['/authors/OL1A']);
   assert.equal(invalid.status, 400);
-  const excessive = await getRecommendations(Array.from({ length: 13 }, (_, index) => `/works/OL${index + 1}W`));
+  const excessive = await getRecommendations(Array.from({ length: 31 }, (_, index) => `/works/OL${index + 1}W`));
   assert.equal(excessive.status, 400);
+  const invalidRead = await getRecommendations(['/works/OL1W'], [], ['/works/OL2W']);
+  assert.equal(invalidRead.status, 400);
+});
+
+test('books already read outweigh Plan to Read books when building the subject profile', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input) => {
+    const url = new URL(String(input));
+    if (url.pathname === '/works/OL70W.json') return Response.json({ subjects: ['Planned topic'] });
+    if (url.pathname === '/works/OL71W.json') return Response.json({ subjects: ['Read topic'] });
+    if (url.pathname === '/subjects/planned_topic.json') {
+      return Response.json({ works: [{ key: '/works/OL72W', title: 'Planned match' }] });
+    }
+    if (url.pathname === '/subjects/read_topic.json') {
+      return Response.json({ works: [{ key: '/works/OL73W', title: 'Read match' }] });
+    }
+    throw new Error(`Unexpected request: ${url}`);
+  };
+  try {
+    const response = await getRecommendations(
+      ['/works/OL70W', '/works/OL71W'],
+      [],
+      ['/works/OL71W'],
+    );
+    assert.equal(response.status, 200);
+    const data = await response.json();
+    assert.equal(data.books[0].title, 'Read match');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 test('recommendations follow the genre mix of the reader’s lists', async () => {

@@ -3,8 +3,9 @@ import { mixBySubject, weightedSubjects } from '../../lib/recommendation-mix.ts'
 import { findReadableWorks } from '../../lib/readable-editions.ts';
 
 const CACHE_MS = 30 * 60 * 1000;
-const MAX_SEEDS = 12;
-const FAVORITE_WEIGHT = 2;
+const MAX_SEEDS = 30;
+const FAVORITE_WEIGHT = 3;
+const READ_WEIGHT = 2;
 const MAX_FAVORITE_AUTHORS = 3;
 const WORKS_PER_AUTHOR = 50;
 const MAX_AUTHOR_WORKS = 12;
@@ -220,6 +221,7 @@ export const GET: APIRoute = async ({ url }) => {
   const requestedSeeds = url.searchParams.getAll('seed');
   const requestedLanguages = url.searchParams.getAll('language');
   const requestedFavorites = url.searchParams.getAll('favorite');
+  const requestedRead = url.searchParams.getAll('read');
   const readableOnly = url.searchParams.get('readable') === '1';
   if (requestedSeeds.length === 0 || requestedSeeds.length > MAX_SEEDS) {
     return jsonResponse({ error: `Provide between 1 and ${MAX_SEEDS} books for recommendations.` }, 400);
@@ -231,7 +233,12 @@ export const GET: APIRoute = async ({ url }) => {
   };
   const seeds = requestedSeeds.map(normalizeSeed);
   const favorites = requestedFavorites.map(normalizeSeed);
-  if (seeds.some((seed) => !seed) || favorites.some((seed) => !seed || !seeds.includes(seed))) {
+  const read = requestedRead.map(normalizeSeed);
+  if (
+    seeds.some((seed) => !seed)
+    || favorites.some((seed) => !seed || !seeds.includes(seed))
+    || read.some((seed) => !seed || !seeds.includes(seed))
+  ) {
     return jsonResponse({ error: 'One or more book IDs are invalid.' }, 400);
   }
   if (requestedLanguages.some((language) =>
@@ -246,7 +253,14 @@ export const GET: APIRoute = async ({ url }) => {
 
   const uniqueSeeds = Array.from(new Set(seeds.filter((seed): seed is string => seed !== null)));
   const favoriteSeeds = new Set(favorites);
-  const resultCacheKey = JSON.stringify([uniqueSeeds, Array.from(favoriteSeeds).sort(), preferredLanguages, readableOnly]);
+  const readSeeds = new Set(read);
+  const resultCacheKey = JSON.stringify([
+    uniqueSeeds,
+    Array.from(favoriteSeeds).sort(),
+    Array.from(readSeeds).sort(),
+    preferredLanguages,
+    readableOnly,
+  ]);
   const cachedRecommendations = recommendationCache.get(resultCacheKey);
   if (cachedRecommendations && cachedRecommendations.expiresAt > Date.now()) {
     return jsonResponse({
@@ -260,7 +274,9 @@ export const GET: APIRoute = async ({ url }) => {
     const selectedSubjects = weightedSubjects(
       seedDetails.map(({ subjects }, index) => ({
         subjects,
-        weight: favoriteSeeds.has(uniqueSeeds[index]) ? FAVORITE_WEIGHT : 1,
+        weight: favoriteSeeds.has(uniqueSeeds[index])
+          ? FAVORITE_WEIGHT
+          : readSeeds.has(uniqueSeeds[index]) ? READ_WEIGHT : 1,
       })),
       MAX_SUBJECTS,
     );

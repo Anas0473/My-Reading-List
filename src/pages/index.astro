@@ -5095,10 +5095,12 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
             const isbn = String(card.dataset.isbn || "").replace(/[\s-]/g, "").toUpperCase();
             const matchesIsbn = normalizedIsbnQuery.length >= 10 && isbn.includes(normalizedIsbnQuery);
             const searchableFields = [title, subtitle, author].map(normalizeSearchText);
-            const matchesText = queryTerms.every((term) => searchableFields.some((field) => {
-              if (field.includes(term)) return true;
+            const matchesText = queryTerms.every((term, termIndex) => searchableFields.some((field) => {
+              const words = field.split(/[^a-z0-9]+/).filter(Boolean);
+              if (words.some((word) => word === term
+                || (termIndex === queryTerms.length - 1 && word.startsWith(term)))) return true;
               if (term.length < 6) return false;
-              return field.split(/[^a-z0-9]+/).some((word) =>
+              return words.some((word) =>
                 Math.abs(word.length - term.length) <= 1 && isWithinOneEdit(word, term),
               );
             }))

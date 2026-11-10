@@ -56,3 +56,9 @@ test('case, accents, partial matches, typo tolerance and ISBN matching still wor
   assert.equal(matches('', 'A Book'), true);
   assert.equal(matches('unrelated', 'The Composition of the Quran'), false);
 });
+
+test('completed query words do not match inside unrelated words', () => {
+  assert.equal(matches('the art of', 'The Art of Walt Disney'), true);
+  assert.equal(matches('the art of', 'Winning the Heart of Your Husband'), false);
+  assert.equal(matches('the art of', 'Digital Finance', 'Big Data, Start-ups, and the Future'), false);
+});

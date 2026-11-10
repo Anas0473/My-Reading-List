@@ -4992,7 +4992,7 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
             .replace(/^ISBN(?:-1[03])?\s*[:#]?\s*/i, "")
             .replace(/[\s-]/g, "")
             .toUpperCase();
-          const queryTerms = normalizeSearchText(query).split(/\s+/).filter(Boolean);
+          const queryTerms = normalizeSearchText(query).split(/[^\p{L}\p{M}\p{N}]+/u).filter(Boolean);
           const isWithinOneEdit = (first: string, second: string) => {
             if (Math.abs(first.length - second.length) > 1) return false;
             let firstIndex = 0;
@@ -5095,15 +5095,16 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
             const isbn = String(card.dataset.isbn || "").replace(/[\s-]/g, "").toUpperCase();
             const matchesIsbn = normalizedIsbnQuery.length >= 10 && isbn.includes(normalizedIsbnQuery);
             const searchableFields = [title, subtitle, author].map(normalizeSearchText);
-            const matchesText = queryTerms.every((term, termIndex) => searchableFields.some((field) => {
-              const words = field.split(/[^a-z0-9]+/).filter(Boolean);
-              if (words.some((word) => word === term
-                || (termIndex === queryTerms.length - 1 && word.startsWith(term)))) return true;
-              if (term.length < 6) return false;
-              return words.some((word) =>
-                Math.abs(word.length - term.length) <= 1 && isWithinOneEdit(word, term),
-              );
-            }))
+            const matchesText = queryTerms.length === 0 || searchableFields.some((field) => {
+              const words = field.split(/[^\p{L}\p{M}\p{N}]+/u).filter(Boolean);
+              return words.some((_, startIndex) => queryTerms.every((term, termIndex) => {
+                const word = words[startIndex + termIndex];
+                if (!word) return false;
+                return word === term
+                  || (termIndex === queryTerms.length - 1 && word.startsWith(term))
+                  || (term.length >= 6 && isWithinOneEdit(word, term));
+              }));
+            })
               || matchesIsbn;
             const matchesLanguage = !language
               || (language === "unknown"

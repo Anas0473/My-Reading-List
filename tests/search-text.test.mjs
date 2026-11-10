@@ -62,3 +62,20 @@ test('completed query words do not match inside unrelated words', () => {
   assert.equal(matches('the art of', 'Winning the Heart of Your Husband'), false);
   assert.equal(matches('the art of', 'Digital Finance', 'Big Data, Start-ups, and the Future'), false);
 });
+
+test('multiword filters match a consecutive phrase within one field', () => {
+  assert.equal(matches('the art of', 'Breath', 'The New Science of a Lost Art'), false);
+  assert.equal(matches('the art of', 'The Subtle Art of Not Giving a F*ck'), false);
+  assert.equal(matches('the art of', 'How to Read a Book', 'The Art of Getting a Liberal Education'), true);
+  assert.equal(matches('the art of', 'The Art', 'Of Living'), false);
+  assert.equal(matches('omar suleiman', 'A Book', '', 'Omar Suleiman'), true);
+  assert.equal(matches('the art of lov', 'The Art of Loving'), true);
+  assert.equal(matches('the compositon of', 'The Composition of the Quran'), true);
+});
+
+test('phrase matching handles punctuation and non-Latin words', () => {
+  assert.equal(matches('art of war', 'The Art-of-War'), true);
+  assert.equal(matches('f*ck', 'The Subtle Art of Not Giving a F*ck'), true);
+  assert.equal(matches('\u0641\u0646 \u0627\u0644\u062d\u0631\u0628', '\u0641\u0646 \u0627\u0644\u062d\u0631\u0628'), true);
+  assert.equal(matches('\u0641\u0646 \u0627\u0644\u062d\u0631\u0628', '\u0627\u0644\u062d\u0631\u0628 \u0641\u0646'), false);
+});

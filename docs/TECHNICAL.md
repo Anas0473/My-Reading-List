@@ -10,6 +10,12 @@ and unpunctuated `Quran` match each other. Case-insensitive and accent-insensiti
 matching, ISBN lookup and the existing typo tolerance are preserved. Displayed
 titles and saved book data are not changed.
 
+Multiword library filters match consecutive words within a title, subtitle or
+author, not scattered words across fields. For example, `the art of` matches
+`The Art of Loving`, but not `The Subtle Art of Not Giving a F*ck` or the subtitle
+`The New Science of a Lost Art`. Completed words match whole words; the final word
+can be a prefix while typing. Punctuation separates words.
+
 Books in Read can be given an optional personal whole-star rating from 1 to 5
 in Book details. Ratings can be changed or cleared and appear on Read cards.
 They are stored per saved edition and included in website cloud sync, not sent

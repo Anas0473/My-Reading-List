@@ -32,6 +32,13 @@
 
 Detailed behavior, setup and configuration notes live in [docs/TECHNICAL.md](docs/TECHNICAL.md).
 
+## Development runtime
+
+Use Node.js 24.x for local development and Vercel deployments. The
+`engines.node` setting in [package.json](package.json) pins the major version
+to prevent automatic upgrades to a different Node.js major. Keep Vercel's
+Node.js Version setting on 24.x as well.
+
 ## ©️ License
 
 Copyright © 2026 Anas B. H. **All rights reserved.**

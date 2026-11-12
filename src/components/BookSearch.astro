@@ -1,4 +1,6 @@
 ---
+import { BOOK_STACKS } from '../lib/book-stacks';
+
 interface Props {
   libraryBooks?: Array<{
     title: string;
@@ -78,6 +80,32 @@ const { libraryBooks = [] } = Astro.props;
     <div id="trending-results" class="results-grid"></div>
     <div class="trending-more">
       <button type="button" id="trending-show-more" class="trending-more-button" hidden>Show more books</button>
+    </div>
+  </section>
+  <section id="book-stacks" class="book-stacks" aria-labelledby="book-stacks-heading">
+    <h3 id="book-stacks-heading">Browse the stacks</h3>
+    <p class="stacks-intro">Find your next read, one subject at a time. Choose a stack to explore.</p>
+    <div class="stack-tiles" role="group" aria-label="Book stacks">
+      {BOOK_STACKS.map((stack) => (
+        <button type="button" class="stack-tile" data-stack={stack.id}
+          aria-pressed="false" aria-controls="stack-content" style={`--stack-color: ${stack.color}`}>
+          <span class="stack-art" aria-hidden="true">
+            <span class="stack-book stack-book-back"></span>
+            <span class="stack-book stack-book-front">{stack.label}</span>
+            <span class="stack-book stack-book-side"></span>
+          </span>
+          <span>{stack.label}</span>
+        </button>
+      ))}
+    </div>
+    <div id="stack-content" class="stack-content" hidden>
+      <h4 id="stack-title"></h4>
+      <p id="stack-status" class="trending-status" role="status" aria-live="polite"></p>
+      <button type="button" id="stack-retry" class="trending-more-button" hidden>Try again</button>
+      <div id="stack-results" class="results-grid" aria-busy="false"></div>
+      <div class="trending-more">
+        <button type="button" id="stack-show-more" class="trending-more-button" hidden>Show more books</button>
+      </div>
     </div>
   </section>
   <div id="search-results" class="results-grid"></div>
@@ -432,6 +460,111 @@ const { libraryBooks = [] } = Astro.props;
   }
   .trending-books[hidden] {
     display: none;
+  }
+  .book-stacks {
+    margin-top: 2.5rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--line);
+  }
+  .book-stacks[hidden],
+  .stack-content[hidden] {
+    display: none;
+  }
+  .book-stacks h3 {
+    margin: 0;
+    font-size: 1.15rem;
+    font-weight: 600;
+  }
+  .stacks-intro {
+    color: var(--muted);
+    font-size: 0.85rem;
+    margin: 0.5rem 0 1rem;
+  }
+  .stack-tiles {
+    display: flex;
+    gap: 0.75rem;
+    overflow-x: auto;
+    padding: 0.25rem 0.2rem 0.75rem;
+    scroll-snap-type: x proximity;
+  }
+  .stack-tile {
+    flex: 0 0 8.5rem;
+    min-width: 0;
+    padding: 0.9rem 0.5rem;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--panel);
+    color: var(--fg);
+    font: inherit;
+    font-size: 0.9rem;
+    cursor: pointer;
+    scroll-snap-align: start;
+  }
+  .stack-tile:hover {
+    background: var(--fill);
+  }
+  .stack-tile[aria-pressed="true"] {
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 10%, var(--panel));
+  }
+  .stack-tile:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  .stack-art {
+    position: relative;
+    display: block;
+    width: 6rem;
+    height: 6rem;
+    margin: 0 auto 0.75rem;
+  }
+  .stack-book {
+    position: absolute;
+    top: 0.5rem;
+    left: 1.15rem;
+    width: 3.75rem;
+    height: 5rem;
+    box-sizing: border-box;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-left: 4px solid rgba(0, 0, 0, 0.2);
+    border-radius: 2px 4px 4px 2px;
+    background: var(--stack-color);
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.3);
+  }
+  .stack-book-back {
+    transform: translateX(-1rem) rotate(-13deg);
+    background: color-mix(in srgb, var(--stack-color) 65%, #232323);
+  }
+  .stack-book-side {
+    transform: translateX(1rem) rotate(13deg);
+    background: color-mix(in srgb, var(--stack-color) 65%, #ded5bb);
+  }
+  .stack-book-front {
+    z-index: 1;
+    display: grid;
+    place-items: center;
+    padding: 0.2rem;
+    color: #fff;
+    font-family: Georgia, serif;
+    font-size: 0.7rem;
+    overflow-wrap: anywhere;
+  }
+  .stack-content {
+    margin-top: 0.75rem;
+    padding: 1rem;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--panel);
+  }
+  .stack-content h4 {
+    margin: 0;
+    font-size: 1.1rem;
+  }
+  .stack-content .results-grid {
+    margin-top: 1rem;
+  }
+  #stack-retry {
+    margin-top: 0.75rem;
   }
   .trending-header {
     display: flex;
@@ -1167,6 +1300,22 @@ const { libraryBooks = [] } = Astro.props;
   const trendingTabs = Array.from(trendingSection.querySelectorAll<HTMLButtonElement>('.trending-tabs button'));
   const trendingPeriodControls = document.getElementById('trending-period-controls') as HTMLElement;
   const trendingShowMoreButton = document.getElementById('trending-show-more') as HTMLButtonElement;
+  const stacksSection = document.getElementById('book-stacks') as HTMLElement;
+  const stackContent = document.getElementById('stack-content') as HTMLElement;
+  const stackContainer = document.getElementById('stack-results') as HTMLElement;
+  const stackTitle = document.getElementById('stack-title') as HTMLElement;
+  const stackStatus = document.getElementById('stack-status') as HTMLElement;
+  const stackRetry = document.getElementById('stack-retry') as HTMLButtonElement;
+  const stackMore = document.getElementById('stack-show-more') as HTMLButtonElement;
+  const stackTiles = Array.from(stacksSection.querySelectorAll<HTMLButtonElement>('[data-stack]'));
+  let selectedStack = '';
+  let stackBooks: any[] = [];
+  let stackPage = 0;
+  let stackHasMore = false;
+  let stackLoading = false;
+  let stackReadable = false;
+  let stackRequestId = 0;
+  let stackController: AbortController | null = null;
   const trendingPeriodLabels: Record<string, string> = { daily: 'today', weekly: 'this week', monthly: 'this month' };
   localStorage.removeItem('my-book-library:trending-period');
   // Trending always opens on Today.
@@ -1208,6 +1357,7 @@ const { libraryBooks = [] } = Astro.props;
   }
   resultsContainer.addEventListener('error', handleCoverError, true);
   trendingContainer.addEventListener('error', handleCoverError, true);
+  stackContainer.addEventListener('error', handleCoverError, true);
   const libraryBooks = JSON.parse(searchContainer.dataset.libraryBooks || '[]') as any[];
   
   let debounceTimer: NodeJS.Timeout;
@@ -2423,6 +2573,7 @@ const { libraryBooks = [] } = Astro.props;
 
   function updateTrendingVisibility() {
     trendingSection.hidden = Boolean(currentQuery);
+    updateStacksVisibility();
     if (trendingSection.hidden) return;
     if (discoveryMode === 'recommended') {
       refreshRecommended();
@@ -2478,7 +2629,123 @@ const { libraryBooks = [] } = Astro.props;
     if (discoveryMode === 'trending' && !trendingSection.hidden && trendingBooks.length) renderTrending();
     // Lists that arrive after the tab opened (e.g. from another device) still get recommendations.
     if (discoveryMode === 'recommended' && !trendingSection.hidden && recommendedShownKeys.size === 0) loadRecommended();
+    if (!stacksSection.hidden && selectedStack) renderStack();
   });
+
+  function renderStack() {
+    const books = currentHideAdded ? stackBooks.filter((book) => !isInMyLists(book)) : stackBooks;
+    renderBookCards(stackContainer, books);
+    stackMore.hidden = !stackHasMore || stackLoading;
+    if (!stackLoading && stackRetry.hidden) {
+      delete stackStatus.dataset.state;
+      stackStatus.textContent = books.length
+        ? `${books.length} books shown. Subject-based picks from Open Library${selectedStack === 'featured' ? '; Featured explores popular fiction' : ''}.`
+        : stackBooks.length
+          ? 'These books are already in your lists. Show more to keep exploring.'
+          : `No ${currentReadableOnly ? 'readable ' : ''}books found in this stack.`;
+    }
+  }
+
+  async function loadStackPage(page: number) {
+    if (!selectedStack) return;
+    stackController?.abort();
+    const controller = new AbortController();
+    stackController = controller;
+    const requestId = ++stackRequestId;
+    const stack = selectedStack;
+    const readable = currentReadableOnly;
+    stackReadable = readable;
+    stackLoading = true;
+    stackRetry.hidden = true;
+    stackMore.hidden = true;
+    stackContainer.setAttribute('aria-busy', 'true');
+    delete stackStatus.dataset.state;
+    stackStatus.textContent = page === 1 ? 'Loading this stack...' : 'Loading more books...';
+    const timeout = setTimeout(() => controller.abort(), 45000);
+    try {
+      const params = new URLSearchParams({ stack, page: String(page), readable: readable ? '1' : '0' });
+      const response = await fetch(`/api/book-stacks.json?${params}`, { signal: controller.signal });
+      const data = await response.json();
+      if (requestId !== stackRequestId) return;
+      if (!response.ok) throw new Error(data.error || 'Could not load this stack. Please try again.');
+      if (data.stack !== stack || data.page !== page || !Array.isArray(data.books)
+        || typeof data.hasMore !== 'boolean'
+        || data.books.some((book: any) => !book || typeof book.title !== 'string' || typeof book.workKey !== 'string')) {
+        throw new Error('Open Library returned invalid stack results. Please try again.');
+      }
+      const existing = new Set(stackBooks.map((book) => book.workKey));
+      stackBooks = page === 1 ? data.books : [
+        ...stackBooks, ...data.books.filter((book: any) => !existing.has(book.workKey)),
+      ];
+      stackPage = page;
+      stackHasMore = data.hasMore && page < 100;
+      stackLoading = false;
+      renderStack();
+    } catch (error) {
+      if (requestId !== stackRequestId) return;
+      stackStatus.textContent = controller.signal.aborted
+        ? 'Loading this stack took too long. Please try again.'
+        : error instanceof Error ? error.message : 'Could not load this stack. Please try again.';
+      stackStatus.dataset.state = 'warning';
+      stackRetry.hidden = false;
+    } finally {
+      clearTimeout(timeout);
+      if (requestId === stackRequestId) {
+        stackLoading = false;
+        stackContainer.setAttribute('aria-busy', 'false');
+        stackController = null;
+      }
+    }
+  }
+
+  function updateStacksVisibility() {
+    stacksSection.hidden = Boolean(currentQuery || searchInput.value.trim());
+    if (stacksSection.hidden) {
+      stackController?.abort();
+      stackController = null;
+      stackRequestId++;
+      stackLoading = false;
+      stackContainer.setAttribute('aria-busy', 'false');
+      return;
+    }
+    if (!selectedStack) return;
+    if (stackLoading && stackReadable === currentReadableOnly) return;
+    if (stackReadable !== currentReadableOnly || stackPage === 0) {
+      stackBooks = [];
+      stackPage = 0;
+      stackHasMore = false;
+      stackContainer.replaceChildren();
+      void loadStackPage(1);
+    } else {
+      renderStack();
+    }
+  }
+
+  stackTiles.forEach((tile) => tile.addEventListener('click', () => {
+    const stack = tile.dataset.stack || '';
+    if (selectedStack === stack) return;
+    selectedStack = stack;
+    stackTitle.textContent = tile.querySelector(':scope > span:last-child')?.textContent || stack;
+    stackContent.hidden = false;
+    stackBooks = [];
+    stackPage = 0;
+    stackHasMore = false;
+    stackContainer.replaceChildren();
+    stackTiles.forEach((item) => item.setAttribute('aria-pressed', String(item === tile)));
+    void loadStackPage(1);
+  }));
+  stackMore.addEventListener('click', () => {
+    if (!stackLoading && stackHasMore) void loadStackPage(stackPage + 1);
+  });
+  stackRetry.addEventListener('click', () => {
+    if (!stackLoading) void loadStackPage(stackPage + 1);
+  });
+  hideAddedToggle.addEventListener('change', () => {
+    if (!stacksSection.hidden && selectedStack) renderStack();
+  });
+  readableOnlyToggle.addEventListener('change', updateStacksVisibility);
+  searchInput.addEventListener('input', updateStacksVisibility);
+  updateStacksVisibility();
 
   document.addEventListener('click', (event) => {
     if (!(event.target as HTMLElement).closest('.shelf-control')) closeShelfMenus();

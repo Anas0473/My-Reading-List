@@ -16,6 +16,8 @@
 
 - 🔥 **Discover** trending books (today, this week, this month) and personal recommendations based on your lists
 
+- 📚 **Browse the stacks**: explore 12 subject-based book stacks with edition details and one-click list controls
+
 - ☁️ **Sync between PC and mobile** with a free account, using Google or email
 
 - 🔁 **Open Library integration**: two-way shelf sync, or a one-time import of your public reading log

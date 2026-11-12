@@ -110,6 +110,28 @@ successful responses may additionally be shared by the CDN for 60 seconds,
 keyed by request URL, while browsers must revalidate. Errors and stale fallback
 responses use `no-store`; failed in-flight requests are cleared so retries can
 recover. These caches contain public discovery data only, not saved libraries.
+
+Browse the stacks appears below Discover when the search box is empty. Its
+keyboard-accessible, horizontally scrollable genre tiles are alphabetical:
+Biography, Crime, Drama, Fantasy, Featured, History, Horror, Kids, Mystery,
+Romance, Sci-Fi and Thriller. The decorative book illustrations need no image
+requests. No stack is fetched until selected. Stacks use fixed Open Library
+subject searches ordered by edition count; Featured explores popular fiction,
+not Open Library's curated selections.
+
+Stack cards use the existing details, edition browser and shelf controls.
+Hide books in my lists filters loaded cards; Readable only reloads the stack
+with Open Library's readable-edition search filter. Search sort/language controls
+remain specific to search results. Show more loads the next 24 books, up to 100
+pages, deduplicating loaded works. Failed pages keep displayed cards and offer
+Try again. Switching stacks or starting a search cancels and discards older
+requests. Clearing search restores the selected stack.
+
+The public stack API validates category and page, shares in-flight requests,
+caches successful pages in memory for five minutes (at most 100 pages total)
+and permits 60 seconds of CDN caching. Errors are logged, returned explicitly,
+and never cached. Trending and stacks share the edition-aware discovery mapping.
+
 The discovery area also has a Recommended for you tab. It uses subjects and
 languages from books in Read, Reading and Plan to Read to find related Open
 Library works with editions in those languages, then hides books already in

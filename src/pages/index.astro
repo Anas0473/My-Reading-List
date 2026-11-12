@@ -2226,8 +2226,12 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
         );
       }
 
-      function removeMatchingContentBooks(book: any) {
-        document.querySelectorAll<HTMLElement>("[data-content-book]").forEach((card) => {
+      function removeMatchingContentBooks(
+        book: any,
+        cards = document.querySelectorAll<HTMLElement>("[data-content-book]"),
+      ) {
+        cards.forEach((card) => {
+          if (!card.isConnected) return;
           const contentBook = {
             title: card.dataset.title,
             author: card.dataset.author,
@@ -2483,18 +2487,23 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
         (target || grid).appendChild(card);
       }
 
-      const initialShelfCards = new Map<string, DocumentFragment>();
-      shelfDefinitions.forEach((shelf) => {
-        initialShelfCards.set(shelf.status, document.createDocumentFragment());
-      });
-      localBooks.forEach((book) => {
-        removeMatchingContentBooks(book);
-        renderLocalBook(book, initialShelfCards.get(book.status));
-      });
-      shelfDefinitions.forEach((shelf) => {
-        document.getElementById(shelf.id)?.querySelector(".cards-grid")
-          ?.appendChild(initialShelfCards.get(shelf.status)!);
-      });
+      function appendLibraryCards() {
+        const shelfCards = new Map<string, DocumentFragment>();
+        shelfDefinitions.forEach((shelf) => {
+          shelfCards.set(shelf.status, document.createDocumentFragment());
+        });
+        const contentCards = document.querySelectorAll<HTMLElement>("[data-content-book]");
+        localBooks.forEach((book) => {
+          if (contentCards.length) removeMatchingContentBooks(book, contentCards);
+          renderLocalBook(book, shelfCards.get(book.status));
+        });
+        shelfDefinitions.forEach((shelf) => {
+          document.getElementById(shelf.id)?.querySelector(".cards-grid")
+            ?.appendChild(shelfCards.get(shelf.status)!);
+        });
+      }
+
+      appendLibraryCards();
 
       function updateShelfCounts() {
         shelfDefinitions.forEach(({ id, status }) => {
@@ -2542,10 +2551,7 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
 
       function refreshLibraryView() {
         document.querySelectorAll("[data-local-book-key]").forEach((card) => card.remove());
-        localBooks.forEach((book) => {
-          removeMatchingContentBooks(book);
-          renderLocalBook(book);
-        });
+        appendLibraryCards();
         updateShelfCounts();
         panelRefreshers.forEach((refreshPanel) => refreshPanel());
         syncShelfControls();
@@ -4960,6 +4966,8 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
         },
       );
 
+      const libraryTitleCollator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
+      const intlLanguageNames = new Intl.DisplayNames(["en"], { type: "language", fallback: "none" });
       panels.forEach((panel) => {
         const searchInput = panel.querySelector(
           ".search-input",
@@ -4978,6 +4986,21 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
         const grid = panel.querySelector(".cards-grid") as HTMLElement;
         const noMatchMsg = panel.querySelector(".no-match-msg") as HTMLElement;
         let readabilityStatus: "" | "checking" | "failed" = "";
+        let lastSortValue = "";
+        let sortedCards: HTMLElement[] = [];
+        let languageOptionsSignature = "";
+        const searchFieldsCache = new WeakMap<HTMLElement, { source: string[]; words: string[][] }>();
+
+        function searchableWords(card: HTMLElement) {
+          const source = [card.dataset.title || "", card.dataset.subtitle || "", card.dataset.author || ""];
+          const cached = searchFieldsCache.get(card);
+          if (cached && source.every((value, index) => value === cached.source[index])) return cached.words;
+          const words = source.map((field) =>
+            normalizeSearchText(field).split(/[^\p{L}\p{M}\p{N}]+/u).filter(Boolean),
+          );
+          searchFieldsCache.set(card, { source, words });
+          return words;
+        }
 
         if (!searchInput || !sortSelect || !languageSelect || !grid) return;
 
@@ -5037,7 +5060,6 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
             cpf: "French-based Creole", mul: "Multiple languages", tib: "Tibetan", tlh: "Klingon",
             und: "Unknown language", zxx: "No linguistic content",
           };
-          const intlLanguageNames = new Intl.DisplayNames(["en"], { type: "language", fallback: "none" });
           const getLanguageName = (code: string) => {
             if (languageNames[code]) return languageNames[code];
             try {
@@ -5046,38 +5068,42 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
               return code.toUpperCase();
             }
           };
-          const languages = [...languageCounts.keys()]
-            .filter((language) => language !== "unknown" && language !== "unverified")
-            .sort((a, b) => getLanguageName(a).localeCompare(getLanguageName(b)));
-          languageSelect.innerHTML = `<option value="">All languages (${cards.length})</option>`;
-          languages.forEach((code) => {
-            const option = document.createElement("option");
-            option.value = code;
-            option.textContent = `${getLanguageName(code)} (${languageCounts.get(code)})`;
-            languageSelect.appendChild(option);
-          });
-          const unknownCount = languageCounts.get("unknown") || 0;
-          const unverifiedCount = languageCounts.get("unverified") || 0;
-          if (unknownCount > 0) {
-            const option = document.createElement("option");
-            option.value = "unknown";
-            option.textContent = `Unknown language (${unknownCount})`;
-            languageSelect.appendChild(option);
+          const nextLanguageOptionsSignature = JSON.stringify([...languageCounts].sort(([a], [b]) => a.localeCompare(b)));
+          if (nextLanguageOptionsSignature !== languageOptionsSignature) {
+            const languages = [...languageCounts.keys()]
+              .filter((language) => language !== "unknown" && language !== "unverified")
+              .sort((a, b) => getLanguageName(a).localeCompare(getLanguageName(b)));
+            languageSelect.innerHTML = `<option value="">All languages (${cards.length})</option>`;
+            languages.forEach((code) => {
+              const option = document.createElement("option");
+              option.value = code;
+              option.textContent = `${getLanguageName(code)} (${languageCounts.get(code)})`;
+              languageSelect.appendChild(option);
+            });
+            const unknownCount = languageCounts.get("unknown") || 0;
+            const unverifiedCount = languageCounts.get("unverified") || 0;
+            if (unknownCount > 0) {
+              const option = document.createElement("option");
+              option.value = "unknown";
+              option.textContent = `Unknown language (${unknownCount})`;
+              languageSelect.appendChild(option);
+            }
+            if (unverifiedCount > 0) {
+              const option = document.createElement("option");
+              option.value = "unverified";
+              option.textContent = `Unverified (${unverifiedCount})`;
+              languageSelect.appendChild(option);
+            }
+            languageSelect.disabled = cards.length === 0;
+            languageSelect.value = [
+              ...languages,
+              ...(unknownCount > 0 ? ["unknown"] : []),
+              ...(unverifiedCount > 0 ? ["unverified"] : []),
+            ].includes(selectedLanguage)
+              ? selectedLanguage
+              : "";
+            languageOptionsSignature = nextLanguageOptionsSignature;
           }
-          if (unverifiedCount > 0) {
-            const option = document.createElement("option");
-            option.value = "unverified";
-            option.textContent = `Unverified (${unverifiedCount})`;
-            languageSelect.appendChild(option);
-          }
-          languageSelect.disabled = cards.length === 0;
-          languageSelect.value = [
-            ...languages,
-            ...(unknownCount > 0 ? ["unknown"] : []),
-            ...(unverifiedCount > 0 ? ["unverified"] : []),
-          ].includes(selectedLanguage)
-            ? selectedLanguage
-            : "";
           const readableOnly = Boolean(readableOnlyCheckbox?.checked);
           resetFiltersButton.disabled = !query
             && sortVal === "date-added-desc"
@@ -5089,14 +5115,10 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
           let visibleCount = 0;
 
           cards.forEach((card) => {
-            const title = card.dataset.title || "";
-            const subtitle = card.dataset.subtitle || "";
-            const author = card.dataset.author || "";
             const isbn = String(card.dataset.isbn || "").replace(/[\s-]/g, "").toUpperCase();
             const matchesIsbn = normalizedIsbnQuery.length >= 10 && isbn.includes(normalizedIsbnQuery);
-            const searchableFields = [title, subtitle, author].map(normalizeSearchText);
-            const matchesText = queryTerms.length === 0 || searchableFields.some((field) => {
-              const words = field.split(/[^\p{L}\p{M}\p{N}]+/u).filter(Boolean);
+            const searchableFields = searchableWords(card);
+            const matchesText = queryTerms.length === 0 || searchableFields.some((words) => {
               return words.some((_, startIndex) => queryTerms.every((term, termIndex) => {
                 const word = words[startIndex + termIndex];
                 if (!word) return false;
@@ -5135,6 +5157,9 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
                 : readableOnly ? "No readable books found." : "No matching books found.";
           }
 
+          if (sortVal === lastSortValue && cards.length === sortedCards.length
+            && cards.every((card, index) => card === sortedCards[index])) return;
+
           cards.sort((a, b) => {
             const titleA = a.dataset.title || "";
             const titleB = b.dataset.title || "";
@@ -5154,27 +5179,13 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
             }
 
             if (sortVal === "title-asc") {
-              const titleComparison = titleA.localeCompare(titleB, undefined, {
-                numeric: true,
-                sensitivity: "base",
-              });
-              const subtitleComparison = (a.dataset.subtitle || "").localeCompare(
-                b.dataset.subtitle || "",
-                undefined,
-                { numeric: true, sensitivity: "base" },
-              );
+              const titleComparison = libraryTitleCollator.compare(titleA, titleB);
+              const subtitleComparison = libraryTitleCollator.compare(a.dataset.subtitle || "", b.dataset.subtitle || "");
               return titleComparison || subtitleComparison;
             }
             if (sortVal === "title-desc") {
-              const titleComparison = titleB.localeCompare(titleA, undefined, {
-                numeric: true,
-                sensitivity: "base",
-              });
-              const subtitleComparison = (b.dataset.subtitle || "").localeCompare(
-                a.dataset.subtitle || "",
-                undefined,
-                { numeric: true, sensitivity: "base" },
-              );
+              const titleComparison = libraryTitleCollator.compare(titleB, titleA);
+              const subtitleComparison = libraryTitleCollator.compare(b.dataset.subtitle || "", a.dataset.subtitle || "");
               return titleComparison || subtitleComparison;
             }
             if (sortVal === "year-desc") return yearB - yearA;
@@ -5187,6 +5198,8 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
             cards.forEach((card) => sortedCards.appendChild(card));
             grid.appendChild(sortedCards);
           }
+          lastSortValue = sortVal;
+          sortedCards = cards;
         }
 
         async function loadMissingEditionLanguages() {
@@ -5281,6 +5294,7 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
         });
         updatePanel();
         panelRefreshers.set(panel.id, () => {
+          lastSortValue = "";
           updatePanel();
           void checkReadableBooks();
         });

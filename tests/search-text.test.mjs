@@ -12,14 +12,16 @@ assert.ok(queryStart >= 0 && queryEnd > queryStart);
 const matchStart = page.indexOf('            const searchableFields =', queryEnd);
 const matchEnd = page.indexOf('            const matchesLanguage =', matchStart);
 assert.ok(matchStart > queryEnd && matchEnd > matchStart);
+const cacheStart = page.indexOf('        const searchFieldsCache =');
+const cacheEnd = page.indexOf('        if (!searchInput', cacheStart);
 const script = ts.transpile(
-  `${page.slice(queryStart, queryEnd)}\n${page.slice(matchStart, matchEnd)}\nresult = matchesText;`,
+  `${page.slice(cacheStart, cacheEnd)}\n${page.slice(queryStart, queryEnd)}\n${page.slice(matchStart, matchEnd)}\nresult = matchesText;`,
   { target: ts.ScriptTarget.ES2022 },
 );
 
 function matches(query, title, subtitle = '', author = '', matchesIsbn = false) {
   const context = vm.createContext({
-    query, title, subtitle, author, matchesIsbn, normalizeSearchText, result: false,
+    query, card: { dataset: { title, subtitle, author } }, matchesIsbn, normalizeSearchText, result: false,
   });
   vm.runInContext(script, context);
   return context.result;

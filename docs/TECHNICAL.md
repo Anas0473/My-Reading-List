@@ -16,6 +16,13 @@ author, not scattered words across fields. For example, `the art of` matches
 `The New Science of a Lost Art`. Completed words match whole words; the final word
 can be a prefix while typing. Punctuation separates words.
 
+Library card rebuilds use one detached fragment per shelf and scan content cards
+once per rebuild. Filtering caches normalized title, subtitle and author words
+per card, refreshing them if those fields change. Language options rebuild only
+when their counts change; sorting runs when the selected order or cards change,
+or a library refresh explicitly invalidates it. Typing still filters immediately,
+with the same phrase, ISBN, language and readability matching rules.
+
 Books in Read can be given an optional personal whole-star rating from 1 to 5
 in Book details. Ratings can be changed or cleared and appear on Read cards.
 They are stored per saved edition and included in website cloud sync, not sent

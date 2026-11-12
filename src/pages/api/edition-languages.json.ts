@@ -15,11 +15,10 @@ function jsonResponse(body: unknown, status = 200) {
 export const POST: APIRoute = async ({ request }) => {
   try {
     const body = await request.json();
-    const editionKeys = Array.isArray(body.editionKeys)
-      ? [...new Set(body.editionKeys
-          .map((value: unknown) => String(value || '').match(/OL\d+M/i)?.[0].toUpperCase())
-          .filter(Boolean))]
-      : [];
+    const requestedKeys: unknown[] = Array.isArray(body.editionKeys) ? body.editionKeys : [];
+    const editionKeys = [...new Set(requestedKeys
+      .map((value) => String(value || '').match(/OL\d+M/i)?.[0].toUpperCase())
+      .filter((value): value is string => value !== undefined))];
 
     if (editionKeys.length > maxBatchSize) {
       return jsonResponse({ languages: {} }, 413);

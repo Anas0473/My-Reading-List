@@ -10,7 +10,7 @@ const queryStart = page.indexOf('          const queryTerms =');
 const queryEnd = page.indexOf('          const sortVal =', queryStart);
 assert.ok(queryStart >= 0 && queryEnd > queryStart);
 const matchStart = page.indexOf('            const searchableFields =', queryEnd);
-const matchEnd = page.indexOf('            const matchesLanguage =', matchStart);
+const matchEnd = page.indexOf('            textMatches.set(', matchStart);
 assert.ok(matchStart > queryEnd && matchEnd > matchStart);
 const cacheStart = page.indexOf('        const searchFieldsCache =');
 const cacheEnd = page.indexOf('        if (!searchInput', cacheStart);

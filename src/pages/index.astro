@@ -5042,6 +5042,23 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
           const sortVal = sortSelect.value;
           const cards = Array.from(grid.querySelectorAll<HTMLElement>(".card"));
           const originalOrder = cards.slice();
+          const textMatches = new Map<HTMLElement, boolean>();
+          cards.forEach((card) => {
+            const isbn = String(card.dataset.isbn || "").replace(/[\s-]/g, "").toUpperCase();
+            const matchesIsbn = normalizedIsbnQuery.length >= 10 && isbn.includes(normalizedIsbnQuery);
+            const searchableFields = searchableWords(card);
+            const matchesText = queryTerms.length === 0 || searchableFields.some((words) => {
+              return words.some((_, startIndex) => queryTerms.every((term, termIndex) => {
+                const word = words[startIndex + termIndex];
+                if (!word) return false;
+                return word === term
+                  || (termIndex === queryTerms.length - 1 && word.startsWith(term))
+                  || (term.length >= 6 && isWithinOneEdit(word, term));
+              }));
+            })
+              || matchesIsbn;
+            textMatches.set(card, matchesText);
+          });
           cards.forEach((card) => {
             if (isKnownEditionLanguage(card.dataset.language)) return;
             const cachedLanguage = editionLanguageCache[normalizeEditionId(card.dataset.editionKey || "")];
@@ -5051,7 +5068,10 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
           });
           const selectedLanguage = languageSelect.value;
           const languageCounts = new Map<string, number>();
+          let textMatchCount = 0;
           cards.forEach((card) => {
+            if (!textMatches.get(card)) return;
+            textMatchCount++;
             const language = card.dataset.language
               || (normalizeEditionId(card.dataset.editionKey || "") ? "unverified" : "unknown");
             languageCounts.set(language, (languageCounts.get(language) || 0) + 1);
@@ -5073,7 +5093,7 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
             const languages = [...languageCounts.keys()]
               .filter((language) => language !== "unknown" && language !== "unverified")
               .sort((a, b) => getLanguageName(a).localeCompare(getLanguageName(b)));
-            languageSelect.innerHTML = `<option value="">All languages (${cards.length})</option>`;
+            languageSelect.innerHTML = `<option value="">All languages (${textMatchCount})</option>`;
             languages.forEach((code) => {
               const option = document.createElement("option");
               option.value = code;
@@ -5115,19 +5135,7 @@ const accountSignedIn = Boolean(websiteCloudOwner(Astro.locals));
           let visibleCount = 0;
 
           cards.forEach((card) => {
-            const isbn = String(card.dataset.isbn || "").replace(/[\s-]/g, "").toUpperCase();
-            const matchesIsbn = normalizedIsbnQuery.length >= 10 && isbn.includes(normalizedIsbnQuery);
-            const searchableFields = searchableWords(card);
-            const matchesText = queryTerms.length === 0 || searchableFields.some((words) => {
-              return words.some((_, startIndex) => queryTerms.every((term, termIndex) => {
-                const word = words[startIndex + termIndex];
-                if (!word) return false;
-                return word === term
-                  || (termIndex === queryTerms.length - 1 && word.startsWith(term))
-                  || (term.length >= 6 && isWithinOneEdit(word, term));
-              }));
-            })
-              || matchesIsbn;
+            const matchesText = textMatches.get(card);
             const matchesLanguage = !language
               || (language === "unknown"
                 ? card.dataset.language === "unknown"

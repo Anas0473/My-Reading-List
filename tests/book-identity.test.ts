@@ -3,11 +3,10 @@ import { test } from 'node:test';
 import { deduplicateRecommendedBooks, isSameRecommendedBook } from '../src/lib/book-identity.ts';
 
 test('recommendations treat different editions of the same work as already listed', () => {
+  const firstEdition = { workKey: '/works/OL123W', editionKey: '/books/OL456M' };
+  const secondEdition = { workKey: '/works/OL123W', editionKey: '/books/OL789M' };
   assert.equal(
-    isSameRecommendedBook(
-      { workKey: '/works/OL123W', editionKey: '/books/OL456M' },
-      { workKey: '/works/OL123W', editionKey: '/books/OL789M' },
-    ),
+    isSameRecommendedBook(firstEdition, secondEdition),
     true,
   );
 });

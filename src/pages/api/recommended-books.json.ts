@@ -133,7 +133,7 @@ function selectPreferredEdition(editions: any[], preferredLanguages: string[]) {
     .filter((edition) => /^\/books\/OL\d+M$/i.test(edition?.key || ''))
     .map((edition) => {
       const languages = Array.isArray(edition.languages)
-        ? edition.languages.map((item: any) => String(item?.key || '').split('/').pop().toLowerCase())
+        ? edition.languages.map((item: any) => String(item?.key || '').split('/').pop()?.toLowerCase() || '')
         : [];
       const matchingLanguage = preferredLanguages.find((language) => languages.includes(language));
       return matchingLanguage ? { edition, matchingLanguage } : null;

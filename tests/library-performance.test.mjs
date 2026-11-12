@@ -27,9 +27,9 @@ function filterHarness(count = 1282) {
   let gridWrites = 0;
   const titleCollator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
   const languageSelect = {
-    value: '', disabled: false,
-    set innerHTML(_value) { optionBuilds++; },
-    appendChild() {},
+    value: '', disabled: false, options: [], label: '',
+    set innerHTML(value) { optionBuilds++; this.label = value; this.options = []; },
+    appendChild(option) { this.options.push(option); },
   };
   const grid = {
     querySelectorAll: () => cards,
@@ -91,9 +91,41 @@ test('filtering 1,282 books reuses text, language options and order across keyst
   const second = h.counts();
   assert.equal(second.normalizations, first.normalizations + 1, 'only the query is normalized again');
   assert.equal(second.comparisons, first.comparisons, 'typing does not sort again');
-  assert.equal(second.optionBuilds, first.optionBuilds, 'typing does not rebuild language options');
+  assert.equal(second.optionBuilds, first.optionBuilds + 1, 'counts update for matching books');
   assert.equal(second.gridWrites, first.gridWrites);
   assert.equal(h.cards.filter((card) => card.style.display === 'flex').length, 94);
+  h.context.searchInput.value = 'Book 12';
+  h.update();
+  assert.equal(h.counts().optionBuilds, second.optionBuilds, 'unchanged counts reuse options');
+});
+
+test('language options count text and ISBN matches independently of selected language', () => {
+  const h = filterHarness(3);
+  h.cards[0].dataset.title = 'Logic one';
+  h.cards[0].dataset.language = 'dan';
+  h.cards[1].dataset.title = 'Logic two';
+  h.cards[1].dataset.language = 'eng';
+  h.cards[1].dataset.isbn = '9781234567890';
+  h.context.searchInput.value = 'logic';
+  h.update();
+  assert.match(h.context.languageSelect.label, /All languages \(2\)/);
+  assert.deepEqual(h.context.languageSelect.options.map((option) => option.textContent), ['Danish (1)', 'English (1)']);
+  h.context.languageSelect.value = 'dan';
+  h.update();
+  assert.equal(h.cards.filter((card) => card.style.display === 'flex').length, 1);
+  assert.equal(h.context.languageSelect.options.length, 2);
+  h.context.searchInput.value = 'ISBN: 978-1234567890';
+  h.update();
+  assert.equal(h.context.languageSelect.value, '', 'unavailable selection resets');
+  assert.match(h.context.languageSelect.label, /All languages \(1\)/);
+  assert.deepEqual(h.context.languageSelect.options.map((option) => option.textContent), ['English (1)']);
+  h.context.searchInput.value = 'no matches';
+  h.update();
+  assert.match(h.context.languageSelect.label, /All languages \(0\)/);
+  assert.equal(h.context.languageSelect.options.length, 0);
+  h.context.searchInput.value = '';
+  h.update();
+  assert.match(h.context.languageSelect.label, /All languages \(3\)/);
 });
 
 test('cached filtering updates after metadata, language and card-set changes', () => {

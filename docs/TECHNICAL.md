@@ -18,8 +18,10 @@ can be a prefix while typing. Punctuation separates words.
 
 Library card rebuilds use one detached fragment per shelf and scan content cards
 once per rebuild. Filtering caches normalized title, subtitle and author words
-per card, refreshing them if those fields change. Language options rebuild only
-when their counts change; sorting runs when the selected order or cards change,
+per card, refreshing them if those fields change. Language options and counts
+reflect the current text or ISBN filter, independently of the selected language,
+and rebuild only when those counts change. A selected language that no longer
+has matches resets to All languages. Sorting runs when the selected order or cards change,
 or a library refresh explicitly invalidates it. Typing still filters immediately,
 with the same phrase, ISBN, language and readability matching rules.
 

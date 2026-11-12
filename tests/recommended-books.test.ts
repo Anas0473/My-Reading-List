@@ -102,7 +102,7 @@ test('recommendations match available editions to the languages in the reader’
           {
             key: '/books/OL21M',
             title: 'Danish translation',
-            languages: [{ key: '/languages/dan' }],
+            languages: [null, {}, { key: '' }, { key: '/languages/dan' }],
             covers: [210],
             publish_date: '2020',
             isbn_13: ['9780000000021'],

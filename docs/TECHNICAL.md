@@ -103,6 +103,13 @@ number of rows as a search results page; Show more trending books adds more rows
 With "Hide books in my
 lists" turned on, books you've already added are skipped and replaced by the
 next trending ones.
+Concurrent trending requests for the same period and readability mode share
+in-flight work within a server instance. Readable and standard requests also
+share the base trending lookup. The existing 30-minute memory caches remain;
+successful responses may additionally be shared by the CDN for 60 seconds,
+keyed by request URL, while browsers must revalidate. Errors and stale fallback
+responses use `no-store`; failed in-flight requests are cleared so retries can
+recover. These caches contain public discovery data only, not saved libraries.
 The discovery area also has a Recommended for you tab. It uses subjects and
 languages from books in Read, Reading and Plan to Read to find related Open
 Library works with editions in those languages, then hides books already in

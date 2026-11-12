@@ -1,7 +1,7 @@
 import type { APIRoute } from 'astro';
-import { MAX_PAGE_SIZE } from '../../lib/responsive-page-size';
-import { communityRating } from '../../lib/community-rating';
-import { findReadableWorks } from '../../lib/readable-editions';
+import { MAX_PAGE_SIZE } from '../../lib/responsive-page-size.ts';
+import { communityRating } from '../../lib/community-rating.ts';
+import { findReadableWorks } from '../../lib/readable-editions.ts';
 
 export const TRENDING_PERIODS = ['daily', 'weekly', 'monthly'] as const;
 export type TrendingPeriod = typeof TRENDING_PERIODS[number];
@@ -11,6 +11,20 @@ const UPSTREAM_LIMIT = MAX_PAGE_SIZE * 2;
 const CACHE_MS = 30 * 60 * 1000;
 const trendingCache = new Map<TrendingPeriod, { expiresAt: number; books: any[] }>();
 const readableTrendingCache = new Map<TrendingPeriod, { expiresAt: number; books: any[] }>();
+const pendingTrending = new Map<string, Promise<any[]>>();
+
+async function sharedTrending(period: TrendingPeriod, readableOnly: boolean) {
+  const key = `${period}:${readableOnly}`;
+  const pending = pendingTrending.get(key);
+  if (pending) return pending;
+  const request = readableOnly ? fetchReadableTrending(period) : fetchTrending(period);
+  pendingTrending.set(key, request);
+  try {
+    return await request;
+  } finally {
+    pendingTrending.delete(key);
+  }
+}
 
 // Open Library mixes work-level data (original title, first publish year) with a cover from an
 // arbitrary edition, so ask for its matched edition and take everything shown from that edition.
@@ -89,7 +103,7 @@ async function fetchReadableTrending(period: TrendingPeriod) {
   const cached = readableTrendingCache.get(period);
   if (cached && cached.expiresAt > Date.now()) return cached.books;
 
-  const trending = await fetchTrending(period);
+  const trending = await sharedTrending(period, false);
   const workKeys: string[] = trending
     .map((book: any) => book.workKey)
     .filter((key: string) => /^\/works\/OL\d+W$/.test(key));
@@ -108,18 +122,19 @@ export const GET: APIRoute = async ({ url }) => {
   const readableOnly = url.searchParams.get('readable') === '1';
   const cache = readableOnly ? readableTrendingCache : trendingCache;
   try {
-    const books = readableOnly ? await fetchReadableTrending(period) : await fetchTrending(period);
+    const books = await sharedTrending(period, readableOnly);
     return new Response(JSON.stringify({ period, books }), {
       headers: {
         'Content-Type': 'application/json',
-        'Cache-Control': 'no-cache',
+        'Cache-Control': 'public, max-age=0, s-maxage=60, must-revalidate',
       },
     });
-  } catch {
+  } catch (error) {
+    console.warn(`Open Library trending lookup failed (${period}, readable=${readableOnly}):`, error);
     const stale = cache.get(period)?.books;
     return new Response(JSON.stringify({ period, books: stale || [], error: !stale }), {
       status: stale ? 200 : 502,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
     });
   }
 };

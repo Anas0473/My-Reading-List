@@ -139,6 +139,11 @@ your lists. Add more books to those lists to refresh and improve recommendations
 
 When syncing from Open Library, a logged edition without a cover is shown as the
 work's newest edition that has one. Editions you pick in this app are kept as chosen.
+If neither an edition cover nor a work cover is available, the logged edition's
+Internet Archive image is used when it has an archive identifier. Sync uses the
+work author names provided by the reading log, matching Open Library's work page;
+edition authors are used when the work has no author names. Work author names come
+from Open Library's reading-log data and may lag behind changes to its catalog.
 Sync reads edition records in batches from Open Library's Books API rather than
 its search index, so cover changes appear on the next successful sync even when
 the index is out of date. Failed edition lookups fail the sync without replacing

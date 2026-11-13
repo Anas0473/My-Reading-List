@@ -15,7 +15,8 @@ test('sync uses current edition covers, preserves logged identity and reports fa
         ? [{
           work: {
             key: '/works/OL46026463W', title: 'Politikens Filosofileksikon',
-            cover_id: 15258954, author_names: ['Stale work author'],
+            cover_id: mode === 'archive' ? null : 15258954,
+            author_names: mode === 'no-work-author' ? [] : ['Current work author'],
           },
           logged_edition: '/books/OL62599958M',
           logged_date: '2026/10/02, 10:00:00',
@@ -36,7 +37,8 @@ test('sync uses current edition covers, preserves logged identity and reports fa
             key: mode === 'wrong-edition' ? '/books/OL1M' : '/books/OL62599958M',
             title: 'Politikens Filosofileksikon',
             authors: [{ name: 'Current edition author' }, { name: 'Second edition author' }],
-            covers: mode === 'coverless' ? [-1] : [-1, 15261064, 15258954],
+            covers: ['coverless', 'archive', 'work-cover-only'].includes(mode) ? [-1] : [-1, 15261064, 15258954],
+            ocaid: 'archive-book',
             publish_date: '2014', languages: [{ key: '/languages/dan' }],
             isbn_13: ['9788740021721'], publishers: ['Politiken'],
           },
@@ -45,7 +47,9 @@ test('sync uses current edition covers, preserves logged identity and reports fa
     }
     if (url.pathname.endsWith('/editions.json')) {
       return Response.json({
-        entries: [{
+        entries: ['archive', 'work-cover-only'].includes(mode) ? [{
+          key: '/books/OL62599958M', title: 'Logged edition', covers: [-1],
+        }] : [{
           key: '/books/OL2M', title: 'Covered replacement', covers: [999],
           publish_date: '2020', publishers: ['Test publisher'],
         }],
@@ -67,7 +71,7 @@ test('sync uses current edition covers, preserves logged identity and reports fa
     assert.equal(data.books[0].editionHeroImage, 'https://covers.openlibrary.org/b/id/15261064-M.jpg');
     assert.equal(data.books[0].editionKey, '/books/OL62599958M');
     assert.equal(data.books[0].loggedEditionKey, '/books/OL62599958M');
-    assert.equal(data.books[0].author, 'Current edition author, Second edition author');
+    assert.equal(data.books[0].author, 'Current work author');
     assert.equal(data.books[0].editionLanguage, 'dan');
     assert.equal(data.books[0].isbn, '9788740021721');
     assert.equal(data.books[0].publisher, 'Politiken');
@@ -80,6 +84,26 @@ test('sync uses current edition covers, preserves logged identity and reports fa
     assert.equal(data.books[0].editionKey, '/books/OL2M');
     assert.equal(data.books[0].loggedEditionKey, '/books/OL62599958M');
     assert.equal(data.books[0].editionHeroImage, 'https://covers.openlibrary.org/b/id/999-M.jpg');
+
+    mode = 'archive';
+    response = await sync();
+    data = await response.json();
+    assert.equal(data.books[0].editionKey, '/books/OL62599958M');
+    assert.equal(data.books[0].loggedEditionKey, '/books/OL62599958M');
+    assert.equal(data.books[0].editionHeroImage, 'https://archive.org/services/img/archive-book');
+    assert.equal(data.books[0].author, 'Current work author');
+
+    mode = 'work-cover-only';
+    response = await sync();
+    data = await response.json();
+    assert.equal(data.books[0].editionKey, '/books/OL62599958M');
+    assert.equal(data.books[0].editionHeroImage, null);
+    assert.equal(data.books[0].heroImage, 'https://covers.openlibrary.org/b/id/15258954-M.jpg');
+
+    mode = 'no-work-author';
+    response = await sync();
+    data = await response.json();
+    assert.equal(data.books[0].author, 'Current edition author, Second edition author');
 
     for (mode of ['failed', 'missing', 'wrong-edition', 'timeout']) {
       response = await sync();

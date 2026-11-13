@@ -142,6 +142,7 @@ export const GET: APIRoute = async ({ url, cookies }) => {
 
     const editionsToEnrich = Array.from(books.values()).filter((book) => book.editionKey);
     const editionsWithCovers = new Set<string>();
+    const archiveCovers = new Map<string, string>();
     for (let offset = 0; offset < editionsToEnrich.length; offset += editionBatchSize) {
       syncStage = `loading edition details (batch ${Math.floor(offset / editionBatchSize) + 1} of ${Math.ceil(editionsToEnrich.length / editionBatchSize)})`;
       if (requestCount > 0) {
@@ -181,7 +182,9 @@ export const GET: APIRoute = async ({ url, cookies }) => {
             .map((author: any) => typeof author?.name === 'string' ? author.name.trim() : '')
             .filter(Boolean)
           : [];
-        if (editionAuthors.length) book.author = editionAuthors.join(', ');
+        if ((!book.author || book.author === 'Unknown Author') && editionAuthors.length) {
+          book.author = editionAuthors.join(', ');
+        }
         book.title = edition.title || book.title;
         book.subtitle = edition.subtitle || null;
         book.pubDate = String(Array.isArray(edition.publish_date)
@@ -198,6 +201,12 @@ export const GET: APIRoute = async ({ url, cookies }) => {
           : null;
         if (coverId) {
           editionsWithCovers.add(book.loggedEditionKey);
+        }
+        if (typeof edition.ocaid === 'string' && edition.ocaid.trim()) {
+          archiveCovers.set(
+            book.loggedEditionKey,
+            `https://archive.org/services/img/${encodeURIComponent(edition.ocaid.trim())}`,
+          );
         }
       }
     }
@@ -217,7 +226,10 @@ export const GET: APIRoute = async ({ url, cookies }) => {
       const hasCover = (edition: any) =>
         Array.isArray(edition?.covers) && edition.covers.some((coverId: any) => Number(coverId) > 0);
       const edition = await findMatchingEdition(workPath, '', undefined, 20000, true, true);
-      if (!hasCover(edition)) continue;
+      if (!hasCover(edition)) {
+        if (!book.heroImage) book.editionHeroImage = archiveCovers.get(book.loggedEditionKey) || null;
+        continue;
+      }
 
       const coverId = edition.covers.find((id: any) => Number(id) > 0);
       book.editionKey = edition.key;

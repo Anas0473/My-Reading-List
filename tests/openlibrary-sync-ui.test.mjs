@@ -94,6 +94,24 @@ test('changed sync updates the list in place and leaves the dialog open', async 
   assert.equal(context.status, '');
 });
 
+test('sync replaces stale author and missing cover without losing personal metadata', async () => {
+  const saved = {
+    ...book, editionKey: '/books/OL1M', author: 'Old author', rating: 5,
+    editionHeroImage: null,
+  };
+  const incoming = {
+    ...book, editionKey: '/books/OL1M', author: 'Work author',
+    editionHeroImage: 'https://archive.org/services/img/example',
+  };
+  const { context, sync } = setup([saved], [incoming]);
+  await sync();
+  assert.equal(context.localBooks[0].author, 'Work author');
+  assert.equal(context.localBooks[0].editionHeroImage, 'https://archive.org/services/img/example');
+  assert.equal(context.localBooks[0].rating, 5);
+  assert.equal(context.localBooks[0].status, 'Read');
+  assert.equal(context.viewRefreshes, 1);
+});
+
 test('unchanged sync finishes without redrawing or closing the dialog', async () => {
   const { context, sync } = setup([book]);
   await sync();
